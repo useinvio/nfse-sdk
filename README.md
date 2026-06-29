@@ -248,6 +248,6 @@ escopado publico no npm.
 
 ## Roadmap
 
-1. Adicionar testes unitarios do SDK.
+1. Expandir cobertura de testes unitarios do SDK.
 2. Criar exemplos minimos.
 3. Publicar pacote npm.
