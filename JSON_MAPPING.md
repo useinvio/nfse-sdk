@@ -1,7 +1,7 @@
 # Mapeamento do JSON da DPS
 
 Este documento descreve o formato aceito por `DpsJsonRequest`, usado por
-`buildDpsFromJson` e por `emitirNota` quando a entrada e JSON declarativo.
+`buildDpsFromJson` e por `emitirNfse` quando a entrada e JSON declarativo.
 
 O JSON e uma representacao tecnica da DPS Nacional. A aplicacao consumidora
 continua responsavel por escolher codigos fiscais, CST, retencoes, serie,

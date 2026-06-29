@@ -1,160 +1,166 @@
 # @nfse-tools/nfse-sdk
 
-SDK TypeScript para a camada tecnica de integracao com a NFS-e Nacional.
+SDK TypeScript para integração com a **NFS-e Nacional** (SEFIN).
 
-O pacote cuida apenas do protocolo de comunicacao com o ambiente nacional da
-NFS-e: certificado A1, assinatura XML, gzip/base64, mTLS, envio, consulta,
-eventos e normalizacao de respostas. Ele nao acessa banco de dados, nao guarda
-certificados e nao implementa regras comerciais da aplicacao que o consome.
+Cuida de todo o protocolo de comunicação: certificado A1, assinatura XML (XMLDSIG), compactação GZip/Base64, mTLS, envio e consulta. A aplicação que consome o SDK continua responsável pelas regras de negócio — código de serviço, CST, retenções, numeração da DPS.
 
-## Status
+---
 
-Este repositorio publica o pacote npm:
+## Índice
 
-```text
-@nfse-tools/nfse-sdk
-```
+- [Instalação](#instalação)
+- [Quick start](#quick-start)
+- [Escolhendo o ponto de entrada](#escolhendo-o-ponto-de-entrada)
+- [Certificado A1](#certificado-a1)
+- [Emitir a partir de XML pronto](#emitir-a-partir-de-xml-pronto)
+- [Emitir a partir de JSON declarativo](#emitir-a-partir-de-json-declarativo)
+- [Inspecionar o XML antes de enviar](#inspecionar-o-xml-antes-de-enviar)
+- [Tratar rejeições da SEFIN](#tratar-rejeições-da-sefin)
+- [Consultar uma NFS-e emitida](#consultar-uma-nfs-e-emitida)
+- [Enviar evento](#enviar-evento-ex-cancelamento)
+- [Série e número da DPS](#série-e-número-da-dps)
+- [Ambientes](#ambientes)
+- [Referência da API](#referência-da-api)
+- [Desenvolvimento](#desenvolvimento)
+- [Publicação no npm](#publicação-no-npm)
 
-Repositorio:
+---
 
-```text
-https://github.com/nfse-tools/nfse-sdk
-```
-
-## Instalacao
-
-Como pacote publicado:
+## Instalação
 
 ```bash
 npm install @nfse-tools/nfse-sdk
 ```
 
-Durante desenvolvimento local:
+> Node.js ≥ 20 é obrigatório.
 
-```bash
-npm install
-npm run typecheck
-npm run build
-```
+---
 
-Tambem e possivel consumir a pasta localmente a partir de outro projeto:
+## Quick start
 
-```json
-{
-  "dependencies": {
-    "@nfse-tools/nfse-sdk": "file:../nfse-sdk"
-  }
-}
-```
-
-## Responsabilidade
-
-O SDK deve fazer:
-
-- carregar ou receber certificado A1 em memoria;
-- extrair chave privada e certificado em PEM;
-- assinar XML com XMLDSIG;
-- compactar XML em GZip e codificar Base64;
-- descompactar respostas GZip/Base64;
-- fazer requisicoes mTLS para a NFS-e Nacional;
-- enviar DPS;
-- consultar NFS-e por chave de acesso;
-- enviar eventos fiscais, como cancelamento;
-- normalizar erros oficiais retornados pela SEFIN;
-- alternar entre producao restrita e producao.
-
-## Escolhendo a entrada
-
-| Caso | Entrada recomendada | Quando usar |
-| --- | --- | --- |
-| O sistema ja monta a DPS oficial | XML | ERP, sistema legado ou aplicacao propria ja produzem XML no layout nacional. |
-| A aplicacao quer montar DPS a partir de dados de negocio | JSON declarativo | A aplicacao consumidora mantem prestador, catalogo de servicos e snapshot da emissao. |
-| A aplicacao precisa controlar o transporte manualmente | Funcoes de baixo nivel | Fluxos customizados de assinatura, gzip/base64, envio, consulta ou evento. |
-
-O JSON da SDK e uma representacao tecnica da DPS. A aplicacao consumidora ainda
-e responsavel por escolher codigo de servico, CST, retencao, serie, numero da DPS
-e demais declaracoes fiscais.
-
-Para detalhes de campos obrigatorios, opcionais e regras de serializacao,
-consulte [JSON_MAPPING.md](./JSON_MAPPING.md).
-
-## Serie e numero da DPS
-
-A SEFIN identifica a DPS pela combinacao de dados do prestador, municipio,
-`serie` e `nDPS`. No XML, esses campos aparecem assim:
-
-```xml
-<serie>1601</serie>
-<nDPS>4</nDPS>
-```
-
-Na SDK, a `serie` deve vir no perfil do prestador ou na emissao:
+O caminho mais comum: emitir uma nota a partir de JSON declarativo.
 
 ```ts
-prestador: {
-  serie: '1601',
-}
-```
-
-```ts
-emissao: {
-  serie: '1601',
-  nDPS: '4',
-}
-```
-
-Quando `emissao.serie` existe, ela sobrescreve `prestador.serie` apenas para
-aquela DPS. A regra operacional comum e manter uma `serie` fixa para cada
-sequencia de emissao e incrementar o `nDPS` a cada nova DPS.
-
-Exemplo:
-
-```text
-serie 1601, nDPS 4
-serie 1601, nDPS 5
-serie 1601, nDPS 6
-```
-
-O Emissor Web pode gerar XML com series proprias, como `70000`. Para emissao via
-API, use uma serie propria valida para API, por exemplo `1601`, e controle o
-proximo `nDPS` na aplicacao consumidora.
-
-## Casos de uso
-
-### 1. Emitir uma DPS em XML ja pronta
-
-Use este caminho quando outro sistema ja gera o XML da DPS. A SDK recebe o XML,
-assina, compacta, envia por mTLS e normaliza rejeicoes oficiais.
-
-```ts
-import { EmitirNotaError, emitirNota, loadPfx } from '@nfse-tools/nfse-sdk';
+import { emitirNfse, loadPfx, EmitirNotaError } from '@nfse-tools/nfse-sdk';
 
 const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
 
-try {
-  const resultado = await emitirNota(dpsXml, pfx, { ambiente: 'restrita' });
+const nota = {
+  ambiente: 'restrita' as const,
+  prestador: {
+    cnpj: '12345678000195',
+    tpInsc: '2',
+    cLocEmi: '4106902',
+    serie: '1601',
+    opSimpNac: '1',
+    regEspTrib: '0',
+  },
+  servico: {
+    cTribNac: '010201',
+    xDescServ: 'Desenvolvimento de software',
+    cLocPrestacao: '4106902',
+    cNBS: '115022000',
+  },
+  emissao: {
+    nDPS: '1',
+    dhEmi: '2026-06-15T10:30:00-03:00',
+    dCompet: '2026-06-01',
+    valores: { vServ: '1500.00' },
+    tributacaoMunicipal: {
+      tribISSQN: '3',
+      cPaisResult: 'BR',
+      tpRetISSQN: '1',
+    },
+    tributacaoFederal: {
+      piscofins: { CST: '07' },
+    },
+    totTrib: {
+      pTotTribFed: '0.00',
+      pTotTribEst: '0.00',
+      pTotTribMun: '5.00',
+    },
+  },
+};
 
-  console.log(resultado.chaveAcesso);
-  console.log(resultado.nfseXml);
+try {
+  const resultado = await emitirNfse(nota, pfx);
+  console.log(resultado.chaveAcesso); // chave de 50 dígitos
+  console.log(resultado.nfseXml);    // XML autorizado pela SEFIN
 } catch (error) {
   if (error instanceof EmitirNotaError) {
-    console.error(error.status);
-    console.error(error.erros);
-  } else {
-    throw error;
+    for (const rejeicao of error.erros) {
+      console.error(rejeicao.Codigo, rejeicao.Descricao);
+    }
   }
 }
 ```
 
-### 2. Emitir a partir de JSON declarativo
+---
 
-Use este caminho quando a aplicacao consumidora tem perfis de prestador e de
-servico, mas quer delegar a montagem tecnica da DPS para a SDK.
+## Escolhendo o ponto de entrada
 
-Os dados abaixo sao ficticios e servem apenas para demonstrar o formato do JSON.
+| Situação | O que usar |
+|---|---|
+| Outro sistema já gera o XML da DPS | `emitirNfse(xmlString, pfx)` |
+| Você monta os dados e quer que a SDK construa o XML | `emitirNfse(notaJson, pfx)` |
+| Precisa inspecionar ou salvar o XML antes de enviar | `buildDpsFromJson(nota)` |
+| Fluxo customizado (assinar, compactar ou enviar separadamente) | funções de baixo nível |
+
+---
+
+## Certificado A1
+
+### A partir de arquivo
 
 ```ts
-import { emitirNota, loadPfx, type DpsJsonRequest } from '@nfse-tools/nfse-sdk';
+import { loadPfx } from '@nfse-tools/nfse-sdk';
+
+const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
+```
+
+### A partir de buffer (ex.: certificado descriptografado do banco)
+
+```ts
+import { loadPfxFromBuffer } from '@nfse-tools/nfse-sdk';
+
+const pfx = loadPfxFromBuffer(pfxBuffer, password);
+```
+
+O objeto `pfx` retornado contém chave privada e certificado em PEM, pronto para assinar e fazer mTLS.
+
+---
+
+## Emitir a partir de XML pronto
+
+Use quando outro sistema (ERP, sistema legado) já gera o XML da DPS no layout nacional.
+
+```ts
+import { emitirNfse, loadPfx } from '@nfse-tools/nfse-sdk';
+
+const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
+
+const resultado = await emitirNfse(dpsXml, pfx, { ambiente: 'restrita' });
+
+console.log(resultado.chaveAcesso);
+console.log(resultado.nfseXml);
+```
+
+> O XML precisa ter o atributo `Id` em `<infDPS>`. Se não tiver, passe `options.dpsId` manualmente.
+
+```ts
+await emitirNfse(dpsXml, pfx, { dpsId: 'DPS0001', ambiente: 'restrita' });
+```
+
+---
+
+## Emitir a partir de JSON declarativo
+
+Use quando a aplicação mantém os perfis de prestador e serviço e quer que a SDK monte o XML.
+
+Para a referência completa de campos aceitos no JSON, consulte [JSON_MAPPING.md](./JSON_MAPPING.md).
+
+```ts
+import { emitirNfse, loadPfx, type DpsJsonRequest } from '@nfse-tools/nfse-sdk';
 
 const nota: DpsJsonRequest = {
   ambiente: 'restrita',
@@ -168,27 +174,25 @@ const nota: DpsJsonRequest = {
   },
   servico: {
     cTribNac: '010201',
-    cNBS: '115022000',
-    xDescServ: 'Servico ficticio de desenvolvimento de software',
+    xDescServ: 'Desenvolvimento de software',
     cLocPrestacao: '4106902',
+    cNBS: '115022000',
   },
   emissao: {
     nDPS: '1',
     dhEmi: '2026-06-15T10:30:00-03:00',
     dCompet: '2026-06-01',
-    valores: {
-      vServ: '1234.56',
-    },
+    valores: { vServ: '1500.00' },
     tributacaoMunicipal: {
       tribISSQN: '3',
-      cPaisResult: 'US',
+      cPaisResult: 'BR',
       tpRetISSQN: '1',
     },
     tributacaoFederal: {
-      piscofins: { CST: '00' },
+      piscofins: { CST: '07' },
     },
     totTrib: {
-      pTotTribFed: '11.33',
+      pTotTribFed: '0.00',
       pTotTribEst: '0.00',
       pTotTribMun: '5.00',
     },
@@ -196,84 +200,70 @@ const nota: DpsJsonRequest = {
 };
 
 const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
-const resultado = await emitirNota(nota, pfx);
+const resultado = await emitirNfse(nota, pfx);
 ```
 
-Campos `pTotTribFed`, `pTotTribEst` e `pTotTribMun` sao percentuais de carga
-tributaria e sao serializados com duas casas decimais, por exemplo `11.33`.
-Eles nao usam a mesma escala de quatro casas das aliquotas como `pAliq`.
+> `pTotTribFed`, `pTotTribEst` e `pTotTribMun` são percentuais com duas casas decimais (ex.: `"5.00"`), diferentes das alíquotas com quatro casas (`pAliq`).
 
-### 3. Gerar XML para inspecao antes do envio
+---
 
-Use este caminho para comparar a DPS gerada com um XML de referencia, salvar um
-snapshot ou depurar rejeicoes de schema antes de chamar a SEFIN.
+## Inspecionar o XML antes de enviar
+
+Útil para comparar com um XML de referência, salvar snapshots ou depurar rejeições de schema.
 
 ```ts
 import { buildDpsFromJson } from '@nfse-tools/nfse-sdk';
 
 const { id, xml } = buildDpsFromJson(nota);
 
-console.log(id);
-console.log(xml);
+console.log(id);  // ex.: "DPS..."
+console.log(xml); // XML não assinado da DPS
 ```
 
-### 4. Tratar rejeicoes oficiais da SEFIN
+---
 
-`emitirNota` lanca `EmitirNotaError` quando a SEFIN retorna HTTP fora da faixa
-2xx ou uma resposta sem XML autorizado. A lista `erros` preserva os campos
-oficiais quando eles estao presentes.
+## Tratar rejeições da SEFIN
+
+`emitirNfse` lança `EmitirNotaError` quando a SEFIN retorna HTTP fora de 2xx ou resposta sem XML autorizado.
 
 ```ts
-import { EmitirNotaError, emitirNota } from '@nfse-tools/nfse-sdk';
+import { EmitirNotaError, emitirNfse } from '@nfse-tools/nfse-sdk';
 
 try {
-  await emitirNota(nota, pfx);
+  await emitirNfse(nota, pfx);
 } catch (error) {
   if (!(error instanceof EmitirNotaError)) throw error;
 
+  console.log('HTTP:', error.status);
+  console.log('DPS ID:', error.dpsId);
+
   for (const rejeicao of error.erros) {
-    console.log(rejeicao.Codigo);
-    console.log(rejeicao.Descricao);
-    console.log(rejeicao.Complemento);
+    console.log(rejeicao.Codigo);       // código oficial SEFIN
+    console.log(rejeicao.Descricao);    // descrição da rejeição
+    console.log(rejeicao.Complemento);  // detalhe adicional (quando presente)
   }
 }
 ```
 
-### 5. Consultar uma NFS-e emitida
+---
 
-Use este caminho quando a aplicacao ja tem a chave de acesso e quer buscar o
-estado atual na NFS-e Nacional.
+## Consultar uma NFS-e emitida
 
 ```ts
 import { consultarNfse } from '@nfse-tools/nfse-sdk';
 
 const resposta = await consultarNfse(chaveAcesso, pfx, 'restrita');
 
-if (resposta.status !== 200) {
+if (resposta.status === 200) {
   console.log(resposta.body);
+} else {
+  console.error('Falha na consulta:', resposta.status, resposta.body);
 }
 ```
 
-## Referencia rapida
+---
 
-### Carregar certificado A1
-
-```ts
-import { loadPfx } from '@nfse-tools/nfse-sdk';
-
-const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
-```
-
-Tambem e possivel carregar o certificado a partir de um buffer, por exemplo
-depois de descriptografar um certificado armazenado pela aplicacao consumidora.
-
-```ts
-import { loadPfxFromBuffer } from '@nfse-tools/nfse-sdk';
-
-const pfx = loadPfxFromBuffer(pfxBuffer, password);
-```
-
-### Enviar evento
+## Enviar evento (ex.: cancelamento)
 
 ```ts
 import { enviarEvento, gzipBase64, signEnveloped } from '@nfse-tools/nfse-sdk';
@@ -281,28 +271,46 @@ import { enviarEvento, gzipBase64, signEnveloped } from '@nfse-tools/nfse-sdk';
 const signedEventXml = signEnveloped(pedRegXml, pedRegId, 'infPedReg', pfx);
 const pedRegXmlGZipB64 = gzipBase64(signedEventXml);
 
-const resposta = await enviarEvento(
-  pedRegXmlGZipB64,
-  pfx,
-  chaveAcesso,
-  'restrita',
-);
+const resposta = await enviarEvento(pedRegXmlGZipB64, pfx, chaveAcesso, 'restrita');
 ```
 
-### Normalizar rejeicoes
+---
+
+## Série e número da DPS
+
+A SEFIN identifica uma DPS pela combinação de prestador, município, `serie` e `nDPS`.
 
 ```ts
-import { extrairErros } from '@nfse-tools/nfse-sdk';
+// série no perfil do prestador (padrão para todas as DPS)
+prestador: {
+  serie: '1601',
+}
 
-const erros = extrairErros(resposta.body);
+// ou por emissão (sobrescreve prestador.serie apenas para esta DPS)
+emissao: {
+  serie: '1601',
+  nDPS: '4',
+}
 ```
+
+O padrão usual é manter uma `serie` fixa e incrementar `nDPS` em cada nova DPS:
+
+```
+serie 1601, nDPS 1
+serie 1601, nDPS 2
+serie 1601, nDPS 3
+```
+
+> O Emissor Web usa séries como `70000`. Para emissão via API, use uma série válida para API (ex.: `1601`) e controle o `nDPS` na sua aplicação.
+
+---
 
 ## Ambientes
 
-Ambientes suportados:
-
-- `restrita`: `https://sefin.producaorestrita.nfse.gov.br/SefinNacional`
-- `producao`: `https://sefin.nfse.gov.br/SefinNacional`
+| Chave | URL |
+|---|---|
+| `restrita` | `https://sefin.producaorestrita.nfse.gov.br/SefinNacional` |
+| `producao` | `https://sefin.nfse.gov.br/SefinNacional` |
 
 ```ts
 import { resolveSefinBaseUrl } from '@nfse-tools/nfse-sdk';
@@ -310,35 +318,42 @@ import { resolveSefinBaseUrl } from '@nfse-tools/nfse-sdk';
 const baseUrl = resolveSefinBaseUrl('restrita');
 ```
 
-## API publica
+---
+
+## Referência da API
+
+### Funções principais
+
+| Função | Descrição |
+|---|---|
+| `emitirNfse(input, pfx, options?)` | Emite uma NFS-e a partir de XML ou JSON. Retorna `ResultadoEmissaoNota`. |
+| `consultarNfse(chaveAcesso, pfx, ambiente?)` | Consulta uma NFS-e pela chave de acesso. |
+| `enviarEvento(xmlGzipB64, pfx, chaveAcesso, ambiente?)` | Envia evento fiscal (cancelamento, etc.). |
+| `buildDpsFromJson(nota)` | Monta o XML da DPS sem assinar nem enviar. |
+
+### Certificado
+
+| Função | Descrição |
+|---|---|
+| `loadPfx(path, password)` | Carrega certificado A1 a partir de arquivo. |
+| `loadPfxFromBuffer(buffer, password)` | Carrega certificado A1 a partir de buffer. |
+
+### Funções de baixo nível
+
+| Função | Descrição |
+|---|---|
+| `signDps(xml, dpsId, pfx)` | Assina XML de DPS com XMLDSIG. |
+| `signEnveloped(xml, id, ref, pfx)` | Assina XML genérico (eventos). |
+| `verifyDps(xml)` | Verifica assinatura de uma DPS. |
+| `gzipBase64(xml)` | Compacta XML em GZip e codifica em Base64. |
+| `gunzipBase64(b64)` | Descompacta resposta GZip/Base64. |
+| `extrairErros(body)` | Normaliza erros oficiais de uma resposta da SEFIN. |
+| `resolveSefinBaseUrl(ambiente)` | Retorna a URL base do ambiente. |
+
+### Tipos exportados
 
 ```ts
-export {
-  DEFAULT_AMBIENTE,
-  EmitirNotaError,
-  SEFIN_BASE_URL,
-  TP_AMB,
-  buildDpsFromJson,
-  buildDpsId,
-  consultarNfse,
-  emitirNota,
-  enviarEvento,
-  extrairErros,
-  gzipBase64,
-  gunzipBase64,
-  loadPfx,
-  loadPfxFromBuffer,
-  resolveSefinBaseUrl,
-  signDps,
-  signEnveloped,
-  verifyDps,
-};
-```
-
-Tipos exportados:
-
-```ts
-export type {
+import type {
   Ambiente,
   DpsJsonInput,
   DpsJsonRequest,
@@ -350,64 +365,55 @@ export type {
   SefinErro,
   SefinResposta,
   ServicoProfile,
-};
+} from '@nfse-tools/nfse-sdk';
 ```
+
+### Constantes
+
+```ts
+import { SEFIN_BASE_URL, TP_AMB, DEFAULT_AMBIENTE } from '@nfse-tools/nfse-sdk';
+```
+
+---
 
 ## Desenvolvimento
 
-Scripts:
-
 ```bash
-npm run typecheck
-npm run build
-npm test
+npm install
+npm run typecheck   # verifica tipos sem compilar
+npm run build       # compila para dist/
+npm test            # build + tipos + testes unitários
 ```
 
-O SDK deve manter testes unitarios para:
+### Uso local em outro projeto
 
-- gzip/base64;
-- normalizacao de erros;
-- montagem de requisicoes sem acessar a rede real;
-- assinatura XML;
-- parsing de certificado PFX com fixture segura.
+```json
+{
+  "dependencies": {
+    "@nfse-tools/nfse-sdk": "file:../nfse-sdk"
+  }
+}
+```
 
-Testes de integracao contra a NFS-e Nacional devem ficar separados dos testes
-unitarios e exigir certificado real e ambiente configurado explicitamente.
+---
 
-## Publicacao no npm
-
-Antes da primeira publicacao, confirme que a organizacao `@nfse-tools` existe no
-npm e que o usuario autenticado tem permissao para publicar nela.
-
-Checklist local:
+## Publicação no npm
 
 ```bash
 npm install
 npm run typecheck
 npm run build
-npm pack --dry-run
-```
-
-Publicacao:
-
-```bash
+npm pack --dry-run   # verifica o que será publicado
 npm publish
 ```
 
-O pacote usa `publishConfig.access = public`, necessario para publicar um pacote
-escopado publico no npm.
+O pacote usa `publishConfig.access = public`, necessário para publicar um pacote escopado público no npm.
 
-## Principios de design
+---
 
-- Sem dependencia de uma aplicacao especifica.
-- Sem import de config, Supabase ou rotas internas.
-- Sem estado global de tenant.
-- Funcoes pequenas, testaveis e reutilizaveis.
-- Erros oficiais devem ser preservados, nao escondidos.
-- O SDK transporta declaracoes fiscais; ele nao julga se elas estao contabilmente corretas.
+## Princípios de design
 
-## Roadmap
-
-1. Expandir cobertura de testes unitarios do SDK.
-2. Criar exemplos executaveis em `examples/` para XML, JSON e eventos.
-3. Publicar pacote npm.
+- Sem dependência de banco de dados, config de aplicação ou estado de tenant.
+- Funções pequenas, testáveis e reutilizáveis.
+- Erros oficiais da SEFIN são preservados na íntegra, não engolidos.
+- O SDK transporta declarações fiscais; não valida se estão contabilmente corretas.

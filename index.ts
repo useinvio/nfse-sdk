@@ -30,7 +30,7 @@ export type {
   Valores,
 } from './dpsJson.js';
 
-export { EmitirNotaError, emitirNota } from './emissaoNota.js';
+export { EmitirNotaError, emitirNfse } from './emissaoNota.js';
 export type { EmitirNotaOptions, NotaInput, ResultadoEmissaoNota } from './emissaoNota.js';
 
 export { gzipBase64, gunzipBase64 } from './gzipB64.js';

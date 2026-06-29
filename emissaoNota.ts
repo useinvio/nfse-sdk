@@ -79,7 +79,7 @@ function prepararNota(input: NotaInput, options: EmitirNotaOptions = {}): NotaPr
  * O metodo centraliza a burocracia do protocolo: monta XML quando recebe JSON,
  * assina, compacta em GZip/Base64, envia por mTLS e normaliza rejeicoes.
  */
-export async function emitirNota(
+export async function emitirNfse(
   input: NotaInput,
   pfx: PfxMaterial,
   options: EmitirNotaOptions = {},
