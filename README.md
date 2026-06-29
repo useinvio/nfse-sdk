@@ -75,6 +75,9 @@ O JSON da SDK e uma representacao tecnica da DPS. A aplicacao consumidora ainda
 e responsavel por escolher codigo de servico, CST, retencao, serie, numero da DPS
 e demais declaracoes fiscais.
 
+Para detalhes de campos obrigatorios, opcionais e regras de serializacao,
+consulte [JSON_MAPPING.md](./JSON_MAPPING.md).
+
 ## Serie e numero da DPS
 
 A SEFIN identifica a DPS pela combinacao de dados do prestador, municipio,
@@ -148,13 +151,15 @@ try {
 Use este caminho quando a aplicacao consumidora tem perfis de prestador e de
 servico, mas quer delegar a montagem tecnica da DPS para a SDK.
 
+Os dados abaixo sao ficticios e servem apenas para demonstrar o formato do JSON.
+
 ```ts
 import { emitirNota, loadPfx, type DpsJsonRequest } from '@nfse-tools/nfse-sdk';
 
 const nota: DpsJsonRequest = {
   ambiente: 'restrita',
   prestador: {
-    cnpj: '38153016000107',
+    cnpj: '12345678000195',
     tpInsc: '2',
     cLocEmi: '4106902',
     serie: '1601',
@@ -164,15 +169,15 @@ const nota: DpsJsonRequest = {
   servico: {
     cTribNac: '010201',
     cNBS: '115022000',
-    xDescServ: 'Desenvolvimento e manutencao de software',
+    xDescServ: 'Servico ficticio de desenvolvimento de software',
     cLocPrestacao: '4106902',
   },
   emissao: {
-    nDPS: '4',
-    dhEmi: '2026-04-20T14:02:19-03:00',
-    dCompet: '2026-03-27',
+    nDPS: '1',
+    dhEmi: '2026-06-15T10:30:00-03:00',
+    dCompet: '2026-06-01',
     valores: {
-      vServ: '46895.59',
+      vServ: '1234.56',
     },
     tributacaoMunicipal: {
       tribISSQN: '3',
