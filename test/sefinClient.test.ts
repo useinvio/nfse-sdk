@@ -28,6 +28,21 @@ test('extrairErros normalizes single error objects', () => {
   ]);
 });
 
+test('extrairErros returns no errors for successful authorization bodies', () => {
+  assert.deepEqual(
+    extrairErros({
+      tipoAmbiente: 2,
+      versaoAplicativo: 'SefinNacional_1.6.0',
+      dataHoraProcessamento: '2026-06-29T13:52:13.3513292-03:00',
+      idDps: 'NFS41069022238153016000107000000000000226043180360794',
+      chaveAcesso: '41069022238153016000107000000000000226043180360794',
+      nfseXmlGZipB64: 'H4sIA...',
+      alertas: null,
+    }),
+    [],
+  );
+});
+
 test('extrairErros keeps unknown responses inspectable', () => {
   assert.deepEqual(extrairErros('Forbidden'), [{ Codigo: 'DESCONHECIDO', Descricao: 'Forbidden' }]);
   assert.deepEqual(extrairErros({ detalhe: 'sem formato oficial' }), [

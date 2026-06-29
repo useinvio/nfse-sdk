@@ -83,27 +83,55 @@ function parseJson(raw: SefinRespostaRaw): SefinResposta {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, any> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeErro(value: any): SefinErro {
+  const erro: SefinErro = {
+    Codigo: String(value.Codigo ?? value.codigo ?? value.code ?? 'DESCONHECIDO'),
+    Descricao: String(value.Descricao ?? value.descricao ?? value.mensagem ?? value.message ?? ''),
+  };
+  const complemento = value.Complemento ?? value.complemento;
+  if (complemento != null) erro.Complemento = String(complemento);
+  return erro;
+}
+
+function isSefinSuccessBody(body: Record<string, any>): boolean {
+  return (
+    body.sucesso === true ||
+    typeof body.chaveAcesso === 'string' ||
+    typeof body.nfseXmlGZipB64 === 'string' ||
+    typeof body.idDps === 'string'
+  );
+}
+
 /** Normaliza a lista de erros retornada pelo SEFIN em diferentes formatos. */
 export function extrairErros(body: any): SefinErro[] {
   if (!body) return [];
-  if (Array.isArray(body)) return body;
-  if (Array.isArray(body.erros)) return body.erros;
-  if (Array.isArray(body.Erros)) return body.Erros;
+  if (Array.isArray(body)) return body.map(normalizeErro);
+  if (!isRecord(body)) {
+    return [{ Codigo: 'DESCONHECIDO', Descricao: String(body) }];
+  }
+  if (isSefinSuccessBody(body)) return [];
+  if (Array.isArray(body.erros)) return body.erros.map(normalizeErro);
+  if (Array.isArray(body.Erros)) return body.Erros.map(normalizeErro);
+  if (Array.isArray(body.erro)) return body.erro.map(normalizeErro);
+  if (Array.isArray(body.Erro)) return body.Erro.map(normalizeErro);
   if (body.Codigo || body.codigo) {
-    return [
-      {
-        Codigo: body.Codigo ?? body.codigo,
-        Descricao: body.Descricao ?? body.descricao ?? body.mensagem ?? '',
-      },
-    ];
+    return [normalizeErro(body)];
   }
   return [
-    { Codigo: 'DESCONHECIDO', Descricao: typeof body === 'string' ? body : JSON.stringify(body) },
+    { Codigo: 'DESCONHECIDO', Descricao: JSON.stringify(body) },
   ];
 }
 
-/** SefinNacional · POST /nfse — envia a DPS (GZip+Base64). */
-export async function enviarDps(dpsXmlGZipB64: string, pfx: PfxMaterial, ambiente?: Ambiente): Promise<SefinResposta> {
+/** SefinNacional · POST /nfse — transporte baixo nivel de DPS ja compactada em GZip+Base64. */
+export async function transmitirDpsCompactada(
+  dpsXmlGZipB64: string,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+): Promise<SefinResposta> {
   const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
   return parseJson(await sefinRequest({ method: 'POST', path: '/nfse', jsonBody: { dpsXmlGZipB64 } }, pfx, base));
 }

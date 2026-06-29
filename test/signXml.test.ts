@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import forge from 'node-forge';
-import { loadPfxFromBuffer, signDps, verifyDps } from '../index.js';
+import { loadPfxFromBuffer, signDps, verifyDps, withUtf8XmlDeclaration } from '../index.js';
 
 const PASSWORD = 'test-password';
 
@@ -44,7 +44,15 @@ test('signDps creates a verifiable XMLDSIG signature', () => {
 
   const signedXml = signDps(xml, 'DPS1', pfx);
 
+  assert.ok(signedXml.startsWith('<?xml version="1.0" encoding="UTF-8"?>'));
   assert.match(signedXml, /<Signature/);
   assert.match(signedXml, /<X509Certificate>/);
   assert.equal(verifyDps(signedXml, pfx.certPem), true);
+});
+
+test('withUtf8XmlDeclaration replaces any existing declaration', () => {
+  const xml = '<?xml version="1.0" encoding="utf-8"?><DPS />';
+
+  assert.equal(withUtf8XmlDeclaration(xml), '<?xml version="1.0" encoding="UTF-8"?><DPS />');
+  assert.equal(withUtf8XmlDeclaration('<DPS />'), '<?xml version="1.0" encoding="UTF-8"?><DPS />');
 });
