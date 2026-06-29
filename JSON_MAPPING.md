@@ -2,6 +2,9 @@
 
 Este documento descreve o formato aceito por `DpsJsonRequest`, usado por
 `buildDpsFromJson` e por `emitirNfse` quando a entrada e JSON declarativo.
+O `NfseClient` tambem usa esse formato internamente: `client.invoices.create`
+traduz a entrada amigavel (`provider`, `customer`, `service`) para
+`DpsJsonRequest` antes de assinar e transmitir.
 
 O JSON e uma representacao tecnica da DPS Nacional. A aplicacao consumidora
 continua responsavel por escolher codigos fiscais, CST, retencoes, serie,

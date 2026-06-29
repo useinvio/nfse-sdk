@@ -11,6 +11,7 @@ Cuida de todo o protocolo de comunicação: certificado A1, assinatura XML (XMLD
 - [Instalação](#instalação)
 - [Quick start](#quick-start)
 - [Escolhendo o ponto de entrada](#escolhendo-o-ponto-de-entrada)
+- [Cliente orientado a recursos](#cliente-orientado-a-recursos)
 - [Certificado A1](#certificado-a1)
 - [Emitir a partir de XML pronto](#emitir-a-partir-de-xml-pronto)
 - [Emitir a partir de JSON declarativo](#emitir-a-partir-de-json-declarativo)
@@ -101,10 +102,98 @@ try {
 
 | Situação | O que usar |
 |---|---|
+| Quer uma API de cliente com `client.invoices.create(...)` | `new NfseClient(...)` |
 | Outro sistema já gera o XML da DPS | `emitirNfse(xmlString, pfx)` |
 | Você monta os dados e quer que a SDK construa o XML | `emitirNfse(notaJson, pfx)` |
 | Precisa inspecionar ou salvar o XML antes de enviar | `buildDpsFromJson(nota)` |
 | Fluxo customizado (assinar, compactar ou enviar separadamente) | funções de baixo nível |
+
+---
+
+## Cliente orientado a recursos
+
+Use `NfseClient` quando preferir configurar ambiente e certificado uma vez e
+emitir notas por recursos, como `client.invoices.create(...)`.
+
+Alguns dados exigidos pela DPS Nacional não aparecem no exemplo de produto
+(`cityCode`, `series`, regime tributário e número da DPS). Eles podem ser
+informados em `defaults` no cliente ou diretamente em cada chamada.
+
+```ts
+import { NfseClient } from '@nfse-tools/nfse-sdk';
+
+const client = new NfseClient({
+  environment: 'sandbox',
+  certificate: {
+    content: process.env.NFSE_CERTIFICATE!, // PFX em base64
+    password: process.env.NFSE_CERTIFICATE_PASSWORD!,
+  },
+  defaults: {
+    provider: {
+      cityCode: '4106902',
+      series: '1601',
+      simpleNationalOption: '1',
+      specialTaxRegime: '0',
+    },
+    service: {
+      cityCode: '4106902',
+    },
+  },
+});
+
+const invoice = await client.invoices.create({
+  number: '1',
+  provider: {
+    document: '12345678000195',
+    municipalRegistration: '123456',
+  },
+  customer: {
+    document: '00000000000',
+    name: 'Example Customer',
+  },
+  service: {
+    code: '010201',
+    description: 'Software development services',
+    amount: 1000,
+  },
+  taxation: {
+    municipal: {
+      tribISSQN: '3',
+      tpRetISSQN: '1',
+    },
+    federal: {
+      piscofins: { CST: '07' },
+    },
+    total: {
+      pTotTribFed: '0.00',
+      pTotTribEst: '0.00',
+      pTotTribMun: '5.00',
+    },
+  },
+});
+
+console.log(invoice.chaveAcesso);
+console.log(invoice.nfseXml);
+```
+
+`environment: 'sandbox'` é alias de `restrita`, e `production` é alias de
+`producao`. O campo `certificate.content` aceita o conteúdo binário do PFX em
+`Buffer` ou o PFX codificado em base64, formato comum para variáveis de
+ambiente.
+
+Para inspecionar a DPS gerada sem assinar nem enviar:
+
+```ts
+const dps = client.invoices.buildDpsJson({
+  number: '1',
+  provider: { document: '12345678000195' },
+  service: {
+    code: '010201',
+    description: 'Software development services',
+    amount: 1000,
+  },
+});
+```
 
 ---
 
@@ -326,6 +415,7 @@ const baseUrl = resolveSefinBaseUrl('restrita');
 
 | Função | Descrição |
 |---|---|
+| `new NfseClient(options)` | Cria cliente com ambiente, certificado e defaults para `invoices.create`, `invoices.get` e `invoices.buildDpsJson`. |
 | `emitirNfse(input, pfx, options?)` | Emite uma NFS-e a partir de XML ou JSON. Retorna `ResultadoEmissaoNota`. |
 | `consultarNfse(chaveAcesso, pfx, ambiente?)` | Consulta uma NFS-e pela chave de acesso. |
 | `enviarEvento(xmlGzipB64, pfx, chaveAcesso, ambiente?)` | Envia evento fiscal (cancelamento, etc.). |
@@ -355,9 +445,11 @@ const baseUrl = resolveSefinBaseUrl('restrita');
 ```ts
 import type {
   Ambiente,
+  CreateInvoiceInput,
   DpsJsonInput,
   DpsJsonRequest,
   EmitirNotaOptions,
+  NfseClientOptions,
   NotaInput,
   PfxMaterial,
   PrestadorProfile,

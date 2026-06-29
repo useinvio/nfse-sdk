@@ -33,6 +33,21 @@ export type {
 export { EmitirNotaError, emitirNfse } from './emissaoNota.js';
 export type { EmitirNotaOptions, NotaInput, ResultadoEmissaoNota } from './emissaoNota.js';
 
+export { NfseClient } from './client.js';
+export type {
+  CreateInvoiceCustomer,
+  CreateInvoiceInput,
+  CreateInvoiceProvider,
+  CreateInvoiceService,
+  CreateInvoiceTaxation,
+  InvoiceResource,
+  NfseCertificateInput,
+  NfseClientOptions,
+  NfseClientProviderDefaults,
+  NfseClientServiceDefaults,
+  NfseEnvironment,
+} from './client.js';
+
 export { gzipBase64, gunzipBase64 } from './gzipB64.js';
 
 export { signDps, signEnveloped, verifyDps, withUtf8XmlDeclaration } from './signXml.js';
