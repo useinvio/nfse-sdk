@@ -17,6 +17,7 @@
     "dist/*.js",
     "dist/*.js.map",
     "README.md",
+    "JSON_MAPPING.md",
     "LICENSE"
   ],
   "scripts": {
