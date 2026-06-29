@@ -115,9 +115,9 @@ try {
 Use `NfseClient` quando preferir configurar ambiente e certificado uma vez e
 emitir notas por recursos, como `client.invoices.create(...)`.
 
-Alguns dados exigidos pela DPS Nacional não aparecem no exemplo de produto
-(`cityCode`, `series`, regime tributário e número da DPS). Eles podem ser
-informados em `defaults` no cliente ou diretamente em cada chamada.
+O cliente usa os mesmos campos do JSON declarativo (`prestador`, `servico` e
+`emissao`). Os `defaults` seguem o mesmo formato e podem ser sobrescritos em
+cada chamada.
 
 ```ts
 import { NfseClient } from '@nfse-tools/nfse-sdk';
@@ -129,42 +129,38 @@ const client = new NfseClient({
     password: process.env.NFSE_CERTIFICATE_PASSWORD!,
   },
   defaults: {
-    provider: {
-      cityCode: '4106902',
-      series: '1601',
-      simpleNationalOption: '1',
-      specialTaxRegime: '0',
+    prestador: {
+      cnpj: '12345678000195',
+      tpInsc: '2',
+      cLocEmi: '4106902',
+      serie: '1601',
+      opSimpNac: '1',
+      regEspTrib: '0',
     },
-    service: {
-      cityCode: '4106902',
+    servico: {
+      cTribNac: '010201',
+      xDescServ: 'Servico ficticio de desenvolvimento de software',
+      cLocPrestacao: '4106902',
     },
   },
 });
 
 const invoice = await client.invoices.create({
-  number: '1',
-  provider: {
-    document: '12345678000195',
-    municipalRegistration: '123456',
-  },
-  customer: {
-    document: '00000000000',
-    name: 'Example Customer',
-  },
-  service: {
-    code: '010201',
-    description: 'Software development services',
-    amount: 1000,
-  },
-  taxation: {
-    municipal: {
+  emissao: {
+    nDPS: '1',
+    valores: { vServ: '1000.00' },
+    tomador: {
+      CPF: '00000000000',
+      xNome: 'Cliente Exemplo',
+    },
+    tributacaoMunicipal: {
       tribISSQN: '3',
       tpRetISSQN: '1',
     },
-    federal: {
+    tributacaoFederal: {
       piscofins: { CST: '07' },
     },
-    total: {
+    totTrib: {
       pTotTribFed: '0.00',
       pTotTribEst: '0.00',
       pTotTribMun: '5.00',
@@ -185,12 +181,12 @@ Para inspecionar a DPS gerada sem assinar nem enviar:
 
 ```ts
 const dps = client.invoices.buildDpsJson({
-  number: '1',
-  provider: { document: '12345678000195' },
-  service: {
-    code: '010201',
-    description: 'Software development services',
-    amount: 1000,
+  prestador: {
+    serie: '1701',
+  },
+  emissao: {
+    nDPS: '2',
+    valores: { vServ: '2500.00' },
   },
 });
 ```
@@ -415,7 +411,7 @@ const baseUrl = resolveSefinBaseUrl('restrita');
 
 | Função | Descrição |
 |---|---|
-| `new NfseClient(options)` | Cria cliente com ambiente, certificado e defaults para `invoices.create`, `invoices.get` e `invoices.buildDpsJson`. |
+| `new NfseClient(options)` | Cria cliente com ambiente, certificado e defaults no mesmo formato do JSON declarativo. |
 | `emitirNfse(input, pfx, options?)` | Emite uma NFS-e a partir de XML ou JSON. Retorna `ResultadoEmissaoNota`. |
 | `consultarNfse(chaveAcesso, pfx, ambiente?)` | Consulta uma NFS-e pela chave de acesso. |
 | `enviarEvento(xmlGzipB64, pfx, chaveAcesso, ambiente?)` | Envia evento fiscal (cancelamento, etc.). |
@@ -449,6 +445,7 @@ import type {
   DpsJsonInput,
   DpsJsonRequest,
   EmitirNotaOptions,
+  NfseClientDpsDefaults,
   NfseClientOptions,
   NotaInput,
   PfxMaterial,

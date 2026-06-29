@@ -35,16 +35,11 @@ export type { EmitirNotaOptions, NotaInput, ResultadoEmissaoNota } from './emiss
 
 export { NfseClient } from './client.js';
 export type {
-  CreateInvoiceCustomer,
   CreateInvoiceInput,
-  CreateInvoiceProvider,
-  CreateInvoiceService,
-  CreateInvoiceTaxation,
   InvoiceResource,
   NfseCertificateInput,
+  NfseClientDpsDefaults,
   NfseClientOptions,
-  NfseClientProviderDefaults,
-  NfseClientServiceDefaults,
   NfseEnvironment,
 } from './client.js';
 
