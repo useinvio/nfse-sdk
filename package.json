@@ -13,7 +13,9 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
+    "dist/*.d.ts",
+    "dist/*.js",
+    "dist/*.js.map",
     "README.md",
     "LICENSE"
   ],
@@ -21,7 +23,7 @@
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && node --test \"dist/**/*.test.js\""
+    "test": "npm run build && tsc -p tsconfig.test.json && node --test \"dist-test/**/*.test.js\""
   },
   "keywords": [
     "nfse",
