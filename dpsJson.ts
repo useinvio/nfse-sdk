@@ -98,6 +98,8 @@ export interface TotTrib {
   pTotTribEst?: string;
   pTotTribMun?: string;
   vTotTrib?: string;
+  pTotTribSN?: string;
+  indTotTrib?: string;
 }
 
 export interface Obra {
@@ -255,11 +257,13 @@ function resolveVServMoeda(input: DpsJsonInput): string {
 }
 
 export function buildDpsId(prestador: PrestadorProfile, nDPS: string, serie = prestador.serie): string {
+  const cnpjDigits = prestador.cnpj.replace(/\D/g, '');
+  const tpInsc = cnpjDigits.length === 14 ? '2' : (prestador.tpInsc ?? '1');
   const id =
     'DPS' +
     pad(prestador.cLocEmi, 7) +
-    (prestador.tpInsc ?? '2') +
-    pad(prestador.cnpj, 14) +
+    tpInsc +
+    pad(cnpjDigits, 14) +
     pad(serie, 5) +
     pad(nDPS, 15);
 
@@ -302,16 +306,25 @@ function buildIntermediario(intermediario: Intermediario): string {
 }
 
 function buildTribMun(trib: TribMun): string {
+  const tribISSQN = trib.tribISSQN ?? '1';
+
+  let discriminator = '';
+  if (tribISSQN === '7') {
+    discriminator = requiredTextEl('cPaisResult', trib.cPaisResult ?? '1058');
+  } else if (tribISSQN === '4') {
+    discriminator = requiredTextEl('tpImunidade', trib.tpImunidade ?? '1');
+  } else if (tribISSQN === '1' || tribISSQN === '2') {
+    discriminator = requiredTextEl('tpRetISSQN', trib.tpRetISSQN ?? '1');
+  }
+
   return el(
     'tribMun',
     [
-      textEl('tribISSQN', trib.tribISSQN),
-      textEl('cPaisResult', trib.cPaisResult),
-      textEl('tpRetISSQN', trib.tpRetISSQN),
+      requiredTextEl('tribISSQN', tribISSQN),
+      discriminator,
       textEl('vBC', trib.vBC ? roundMoney(trib.vBC) : undefined),
       textEl('pAliq', trib.pAliq ? roundRate(trib.pAliq) : undefined),
       textEl('vISSQN', trib.vISSQN ? roundMoney(trib.vISSQN) : undefined),
-      textEl('tpImunidade', trib.tpImunidade),
     ].join(''),
   );
 }
@@ -371,16 +384,45 @@ function buildTribNac(trib: TribNac): string {
   return el('tribNac', ibs + cbs);
 }
 
-function buildTotTrib(tot: TotTrib): string {
-  const pTotTrib = el(
-    'pTotTrib',
-    [
-      textEl('pTotTribFed', tot.pTotTribFed !== undefined ? roundTaxBurdenRate(tot.pTotTribFed) : undefined),
-      textEl('pTotTribEst', tot.pTotTribEst !== undefined ? roundTaxBurdenRate(tot.pTotTribEst) : undefined),
-      textEl('pTotTribMun', tot.pTotTribMun !== undefined ? roundTaxBurdenRate(tot.pTotTribMun) : undefined),
-    ].join(''),
-  );
-  return el('totTrib', pTotTrib + textEl('vTotTrib', tot.vTotTrib !== undefined ? roundMoney(tot.vTotTrib) : undefined));
+function buildTotTrib(tot: TotTrib, opSimpNac: string): string {
+  const hasExplicitValue =
+    tot.vTotTrib !== undefined ||
+    tot.pTotTribFed !== undefined ||
+    tot.pTotTribEst !== undefined ||
+    tot.pTotTribMun !== undefined ||
+    tot.pTotTribSN !== undefined ||
+    tot.indTotTrib !== undefined;
+
+  if (hasExplicitValue) {
+    const pBlock =
+      tot.pTotTribFed !== undefined || tot.pTotTribEst !== undefined || tot.pTotTribMun !== undefined
+        ? el(
+            'pTotTrib',
+            [
+              textEl('pTotTribFed', tot.pTotTribFed !== undefined ? roundTaxBurdenRate(tot.pTotTribFed) : undefined),
+              textEl('pTotTribEst', tot.pTotTribEst !== undefined ? roundTaxBurdenRate(tot.pTotTribEst) : undefined),
+              textEl('pTotTribMun', tot.pTotTribMun !== undefined ? roundTaxBurdenRate(tot.pTotTribMun) : undefined),
+            ].join(''),
+          )
+        : '';
+    return el(
+      'totTrib',
+      [
+        textEl('vTotTrib', tot.vTotTrib !== undefined ? roundMoney(tot.vTotTrib) : undefined),
+        pBlock,
+        textEl('pTotTribSN', tot.pTotTribSN !== undefined ? roundTaxBurdenRate(tot.pTotTribSN) : undefined),
+        textEl('indTotTrib', tot.indTotTrib),
+      ].join(''),
+    );
+  }
+
+  // Fallback obrigatório: totTrib precisa de ao menos um filho.
+  // Não Optante (1): indTotTrib e pTotTribSN são proibidos → usa pTotTrib zerado.
+  // Simples Nacional (2/3): usa indTotTrib=0.
+  if (opSimpNac === '1') {
+    return el('totTrib', el('pTotTrib', requiredTextEl('pTotTribFed', '0.00') + requiredTextEl('pTotTribEst', '0.00') + requiredTextEl('pTotTribMun', '0.00')));
+  }
+  return el('totTrib', requiredTextEl('indTotTrib', '0'));
 }
 
 function buildComExt(input: DpsJsonInput, comExt: Partial<ComExt>): string {
@@ -451,7 +493,7 @@ export function buildDpsFromJson(input: DpsJsonRequest | string): BuiltDps {
       buildTribMun(emissao.tributacaoMunicipal ?? {}),
       emissao.tributacaoFederal ? buildTribFed(emissao.tributacaoFederal) : '',
       emissao.tribNac ? buildTribNac(emissao.tribNac) : '',
-      emissao.totTrib ? buildTotTrib(emissao.totTrib) : '',
+      buildTotTrib(emissao.totTrib ?? {}, prestador.opSimpNac),
     ].join(''),
   );
 
