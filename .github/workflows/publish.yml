@@ -58,10 +58,11 @@ jobs:
       - name: Check release tag matches package version
         if: github.event_name == 'release'
         run: |
-          expected_tag="v${{ steps.package.outputs.version }}"
-          if [ "${{ github.event.release.tag_name }}" != "$expected_tag" ]; then
-            echo "Release tag ${{ github.event.release.tag_name }} does not match package version ${{ steps.package.outputs.version }}."
-            echo "Create the GitHub release from tag $expected_tag, or update package.json before releasing."
+          package_version="$(node -p 'require("./package.json").version')"
+          release_tag="${{ github.event.release.tag_name }}"
+          if [ "$release_tag" != "$package_version" ] && [ "$release_tag" != "v$package_version" ]; then
+            echo "Release tag $release_tag does not match package version $package_version."
+            echo "Create the GitHub release from tag $package_version or v$package_version, or update package.json before releasing."
             exit 1
           fi
 
