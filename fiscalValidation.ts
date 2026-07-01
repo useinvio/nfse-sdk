@@ -160,7 +160,7 @@ function validateTribMun(issues: string[], trib: TribMun | undefined, opSimpNac:
 function validateTotTrib(issues: string[], emissao: DpsJsonInput, opSimpNac: string): void {
   const tot = emissao.totTrib;
   if (!tot) {
-    issue(issues, 'emissao.totTrib e obrigatorio; a SDK nao preenche carga tributaria aproximada por default');
+    issue(issues, 'emissao.totTrib e obrigatorio; informe vTotTrib, pTotTrib*, pTotTribSN ou indTotTrib=0');
     return;
   }
 
@@ -173,11 +173,11 @@ function validateTotTrib(issues: string[], emissao: DpsJsonInput, opSimpNac: str
     tot.indTotTrib !== undefined;
 
   if (!hasExplicitValue) {
-    issue(issues, 'emissao.totTrib deve informar vTotTrib, pTotTrib*, pTotTribSN ou indTotTrib');
+    issue(issues, 'emissao.totTrib deve informar vTotTrib, pTotTrib*, pTotTribSN ou indTotTrib=0');
   }
 
-  if (opSimpNac === '1' && (tot.pTotTribSN !== undefined || tot.indTotTrib !== undefined)) {
-    issue(issues, 'emissao.totTrib.pTotTribSN/indTotTrib nao devem ser informados para prestador.opSimpNac = 1');
+  if (opSimpNac === '1' && tot.pTotTribSN !== undefined) {
+    issue(issues, 'emissao.totTrib.pTotTribSN nao deve ser informado para prestador.opSimpNac = 1');
   }
 
   assertDecimal(issues, 'emissao.totTrib.vTotTrib', tot.vTotTrib);
