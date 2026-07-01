@@ -1,6 +1,6 @@
 {
   "name": "@useinvio/nfse-sdk",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "SDK TypeScript para integração técnica com a NFS-e Nacional.",
   "type": "module",
   "main": "./dist/index.js",
