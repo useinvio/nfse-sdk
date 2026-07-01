@@ -85,3 +85,27 @@ test('generated DPS XML validates against the official NFS-e Nacional v1.01 XSD'
     execFileSync('xmllint', ['--noout', '--schema', schemaPath, xmlPath], { stdio: 'pipe' });
   });
 });
+
+test('generated DPS XML with indTotTrib=0 validates for non-Simples providers', () => {
+  const { xml } = buildDpsFromJson({
+    ...request,
+    prestador: {
+      ...request.prestador,
+      opSimpNac: '1',
+    },
+    emissao: {
+      ...request.emissao,
+      totTrib: {
+        indTotTrib: '0',
+      },
+    },
+  });
+  const dir = mkdtempSync(join(tmpdir(), 'nfse-sdk-xsd-'));
+  const schemaPath = prepareXmllintSchemaDir(dir);
+  const xmlPath = join(dir, 'dps.xml');
+  writeFileSync(xmlPath, xml);
+
+  assert.doesNotThrow(() => {
+    execFileSync('xmllint', ['--noout', '--schema', schemaPath, xmlPath], { stdio: 'pipe' });
+  });
+});

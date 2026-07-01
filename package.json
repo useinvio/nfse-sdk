@@ -1,6 +1,6 @@
 {
   "name": "@useinvio/nfse-sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "SDK TypeScript para integração técnica com a NFS-e Nacional.",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,7 +24,7 @@
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && tsc -p tsconfig.test.json && node --test \"dist-test/**/*.test.js\""
+    "test": "npm run build && tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js"
   },
   "keywords": [
     "nfse",

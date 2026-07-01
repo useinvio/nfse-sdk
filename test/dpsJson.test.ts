@@ -102,7 +102,50 @@ test('buildDpsFromJson rejects missing fiscal blocks instead of assuming default
     (error) =>
       error instanceof DpsFiscalValidationError &&
       error.issues.includes('emissao.tributacaoMunicipal e obrigatorio; a SDK nao assume tribISSQN/tpRetISSQN por default') &&
-      error.issues.includes('emissao.totTrib e obrigatorio; a SDK nao preenche carga tributaria aproximada por default'),
+      error.issues.includes('emissao.totTrib e obrigatorio; informe vTotTrib, pTotTrib*, pTotTribSN ou indTotTrib=0'),
+  );
+});
+
+test('buildDpsFromJson accepts indTotTrib=0 for non-Simples providers', () => {
+  const valid: DpsJsonRequest = {
+    ...request,
+    prestador: {
+      ...request.prestador,
+      opSimpNac: '1',
+    },
+    emissao: {
+      ...request.emissao,
+      totTrib: {
+        indTotTrib: '0',
+      },
+    },
+  };
+
+  const { xml } = buildDpsFromJson(valid);
+
+  assert.match(xml, /<indTotTrib>0<\/indTotTrib>/);
+});
+
+test('buildDpsFromJson rejects pTotTribSN for non-Simples providers', () => {
+  const invalid: DpsJsonRequest = {
+    ...request,
+    prestador: {
+      ...request.prestador,
+      opSimpNac: '1',
+    },
+    emissao: {
+      ...request.emissao,
+      totTrib: {
+        pTotTribSN: '5',
+      },
+    },
+  };
+
+  assert.throws(
+    () => buildDpsFromJson(invalid),
+    (error) =>
+      error instanceof DpsFiscalValidationError &&
+      error.issues.includes('emissao.totTrib.pTotTribSN nao deve ser informado para prestador.opSimpNac = 1'),
   );
 });
 

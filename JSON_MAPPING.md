@@ -208,11 +208,11 @@ ainda nao implementa esse bloco.
 | `pTotTribEst` | Condicional | `string` | Percentual aproximado de tributos estaduais. Serializado com duas casas decimais. |
 | `pTotTribMun` | Condicional | `string` | Percentual aproximado de tributos municipais. Serializado com duas casas decimais. |
 | `vTotTrib` | Condicional | `string` | Valor total aproximado de tributos. Serializado com duas casas decimais. |
-| `pTotTribSN` | Condicional | `string` | Percentual aproximado de tributos no Simples Nacional. |
-| `indTotTrib` | Condicional | `string` | Indicador oficial de total aproximado. |
+| `pTotTribSN` | Condicional | `string` | Percentual aproximado de tributos no Simples Nacional. Nao informe quando `prestador.opSimpNac = "1"`. |
+| `indTotTrib` | Condicional | `string` | Indicador oficial para nao informar valor estimado. Use `0` quando nao houver estimativa aproximada. |
 
 Informe ao menos uma forma de totalizacao: `vTotTrib`, grupo `pTotTrib*`,
-`pTotTribSN` ou `indTotTrib`.
+`pTotTribSN` ou `indTotTrib=0`.
 
 ## Regras de formatacao
 
