@@ -54,6 +54,16 @@ jobs:
           echo "name=$(node -p 'require(\"./package.json\").name')" >> "$GITHUB_OUTPUT"
           echo "version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
 
+      - name: Check release tag matches package version
+        if: github.event_name == 'release'
+        run: |
+          expected_tag="v${{ steps.package.outputs.version }}"
+          if [ "${{ github.event.release.tag_name }}" != "$expected_tag" ]; then
+            echo "Release tag ${{ github.event.release.tag_name }} does not match package version ${{ steps.package.outputs.version }}."
+            echo "Create the GitHub release from tag $expected_tag, or update package.json before releasing."
+            exit 1
+          fi
+
       - name: Check npm version
         id: npm
         run: |
