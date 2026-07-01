@@ -1,5 +1,9 @@
 # @useinvio/nfse-sdk
 
+[![npm version](https://img.shields.io/npm/v/@useinvio/nfse-sdk.svg)](https://www.npmjs.com/package/@useinvio/nfse-sdk)
+[![npm access](https://img.shields.io/badge/npm-public-brightgreen.svg)](https://www.npmjs.com/package/@useinvio/nfse-sdk)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-339933.svg)](https://nodejs.org/)
+
 SDK TypeScript para integração com a **NFS-e Nacional** (SEFIN).
 
 Cuida de todo o protocolo de comunicação: certificado A1, assinatura XML (XMLDSIG), compactação GZip/Base64, mTLS, envio e consulta. A aplicação que consome o SDK continua responsável pelas regras de negócio — código de serviço, CST, retenções, numeração da DPS.
@@ -491,6 +495,8 @@ npm test            # build + tipos + testes unitários
 ---
 
 ## Publicação no npm
+
+Pacote publicado publicamente no npm como [`@useinvio/nfse-sdk`](https://www.npmjs.com/package/@useinvio/nfse-sdk).
 
 ```bash
 npm install
