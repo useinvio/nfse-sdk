@@ -1,4 +1,4 @@
-# @nfse-tools/nfse-sdk
+# @useinvio/nfse-sdk
 
 SDK TypeScript para integração com a **NFS-e Nacional** (SEFIN).
 
@@ -30,7 +30,7 @@ Cuida de todo o protocolo de comunicação: certificado A1, assinatura XML (XMLD
 ## Instalação
 
 ```bash
-npm install @nfse-tools/nfse-sdk
+npm install @useinvio/nfse-sdk
 ```
 
 > Node.js ≥ 20 é obrigatório.
@@ -42,7 +42,7 @@ npm install @nfse-tools/nfse-sdk
 O caminho mais comum: emitir uma nota a partir de JSON declarativo.
 
 ```ts
-import { emitirNfse, loadPfx, EmitirNotaError } from '@nfse-tools/nfse-sdk';
+import { emitirNfse, loadPfx, EmitirNotaError } from '@useinvio/nfse-sdk';
 
 const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
 
@@ -120,7 +120,7 @@ O cliente usa os mesmos campos do JSON declarativo (`prestador`, `servico` e
 cada chamada.
 
 ```ts
-import { NfseClient } from '@nfse-tools/nfse-sdk';
+import { NfseClient } from '@useinvio/nfse-sdk';
 
 const client = new NfseClient({
   environment: 'sandbox',
@@ -198,7 +198,7 @@ const dps = client.invoices.buildDpsJson({
 ### A partir de arquivo
 
 ```ts
-import { loadPfx } from '@nfse-tools/nfse-sdk';
+import { loadPfx } from '@useinvio/nfse-sdk';
 
 const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
 ```
@@ -206,7 +206,7 @@ const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
 ### A partir de buffer (ex.: certificado descriptografado do banco)
 
 ```ts
-import { loadPfxFromBuffer } from '@nfse-tools/nfse-sdk';
+import { loadPfxFromBuffer } from '@useinvio/nfse-sdk';
 
 const pfx = loadPfxFromBuffer(pfxBuffer, password);
 ```
@@ -220,7 +220,7 @@ O objeto `pfx` retornado contém chave privada e certificado em PEM, pronto para
 Use quando outro sistema (ERP, sistema legado) já gera o XML da DPS no layout nacional.
 
 ```ts
-import { emitirNfse, loadPfx } from '@nfse-tools/nfse-sdk';
+import { emitirNfse, loadPfx } from '@useinvio/nfse-sdk';
 
 const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
 
@@ -243,9 +243,10 @@ await emitirNfse(dpsXml, pfx, { dpsId: 'DPS0001', ambiente: 'restrita' });
 Use quando a aplicação mantém os perfis de prestador e serviço e quer que a SDK monte o XML.
 
 Para a referência completa de campos aceitos no JSON, consulte [JSON_MAPPING.md](./JSON_MAPPING.md).
+O builder valida formatos e combinações mínimas antes de gerar XML, mas não escolhe códigos fiscais por você. Campos como `tributacaoMunicipal` e `totTrib` precisam ser informados explicitamente; a SDK não assume tributação nem carga tributária por default.
 
 ```ts
-import { emitirNfse, loadPfx, type DpsJsonRequest } from '@nfse-tools/nfse-sdk';
+import { emitirNfse, loadPfx, type DpsJsonRequest } from '@useinvio/nfse-sdk';
 
 const nota: DpsJsonRequest = {
   ambiente: 'restrita',
@@ -289,6 +290,7 @@ const resultado = await emitirNfse(nota, pfx);
 ```
 
 > `pTotTribFed`, `pTotTribEst` e `pTotTribMun` são percentuais com duas casas decimais (ex.: `"5.00"`), diferentes das alíquotas com quatro casas (`pAliq`).
+> O shape simplificado legado de `tribNac` é rejeitado: IBS/CBS no layout nacional `v1.01` exige o bloco RTC `IBSCBS`, ainda não implementado nesta SDK.
 
 ---
 
@@ -297,7 +299,7 @@ const resultado = await emitirNfse(nota, pfx);
 Útil para comparar com um XML de referência, salvar snapshots ou depurar rejeições de schema.
 
 ```ts
-import { buildDpsFromJson } from '@nfse-tools/nfse-sdk';
+import { buildDpsFromJson } from '@useinvio/nfse-sdk';
 
 const { id, xml } = buildDpsFromJson(nota);
 
@@ -312,7 +314,7 @@ console.log(xml); // XML não assinado da DPS
 `emitirNfse` lança `EmitirNotaError` quando a SEFIN retorna HTTP fora de 2xx ou resposta sem XML autorizado.
 
 ```ts
-import { EmitirNotaError, emitirNfse } from '@nfse-tools/nfse-sdk';
+import { EmitirNotaError, emitirNfse } from '@useinvio/nfse-sdk';
 
 try {
   await emitirNfse(nota, pfx);
@@ -335,7 +337,7 @@ try {
 ## Consultar uma NFS-e emitida
 
 ```ts
-import { consultarNfse } from '@nfse-tools/nfse-sdk';
+import { consultarNfse } from '@useinvio/nfse-sdk';
 
 const resposta = await consultarNfse(chaveAcesso, pfx, 'restrita');
 
@@ -351,7 +353,7 @@ if (resposta.status === 200) {
 ## Enviar evento (ex.: cancelamento)
 
 ```ts
-import { enviarEvento, gzipBase64, signEnveloped } from '@nfse-tools/nfse-sdk';
+import { enviarEvento, gzipBase64, signEnveloped } from '@useinvio/nfse-sdk';
 
 const signedEventXml = signEnveloped(pedRegXml, pedRegId, 'infPedReg', pfx);
 const pedRegXmlGZipB64 = gzipBase64(signedEventXml);
@@ -398,7 +400,7 @@ serie 1601, nDPS 3
 | `producao` | `https://sefin.nfse.gov.br/SefinNacional` |
 
 ```ts
-import { resolveSefinBaseUrl } from '@nfse-tools/nfse-sdk';
+import { resolveSefinBaseUrl } from '@useinvio/nfse-sdk';
 
 const baseUrl = resolveSefinBaseUrl('restrita');
 ```
@@ -454,13 +456,13 @@ import type {
   SefinErro,
   SefinResposta,
   ServicoProfile,
-} from '@nfse-tools/nfse-sdk';
+} from '@useinvio/nfse-sdk';
 ```
 
 ### Constantes
 
 ```ts
-import { SEFIN_BASE_URL, TP_AMB, DEFAULT_AMBIENTE } from '@nfse-tools/nfse-sdk';
+import { SEFIN_BASE_URL, TP_AMB, DEFAULT_AMBIENTE } from '@useinvio/nfse-sdk';
 ```
 
 ---
@@ -474,12 +476,14 @@ npm run build       # compila para dist/
 npm test            # build + tipos + testes unitários
 ```
 
+`npm test` também valida uma DPS gerada contra os XSD oficiais em `schemas/nfse/v1.01/Schemas/1.01`. Para compatibilidade com `xmllint`, o teste corrige em uma cópia temporária a âncora regex de `TSSerieDPS` presente no XSD oficial; os arquivos baixados do gov.br ficam preservados sem alteração.
+
 ### Uso local em outro projeto
 
 ```json
 {
   "dependencies": {
-    "@nfse-tools/nfse-sdk": "file:../nfse-sdk"
+    "@useinvio/nfse-sdk": "file:../nfse-sdk"
   }
 }
 ```

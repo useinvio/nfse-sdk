@@ -1,9 +1,10 @@
 import { DEFAULT_AMBIENTE, TP_AMB } from './config.js';
+import { validateDpsJsonRequest } from './fiscalValidation.js';
 import type { Ambiente } from './config.js';
 
 const NS = 'http://www.sped.fazenda.gov.br/nfse';
 const VERSAO = '1.01';
-const VER_APLIC = '@nfse-tools/nfse-sdk';
+const VER_APLIC = 'UseInvio';
 
 export interface PrestadorProfile {
   cnpj: string;
@@ -12,6 +13,7 @@ export interface PrestadorProfile {
   cLocEmi: string;
   serie: string;
   opSimpNac: string;
+  regApTribSN?: string;
   regEspTrib: string;
 }
 
@@ -306,15 +308,13 @@ function buildIntermediario(intermediario: Intermediario): string {
 }
 
 function buildTribMun(trib: TribMun): string {
-  const tribISSQN = trib.tribISSQN ?? '1';
+  const tribISSQN = trib.tribISSQN;
 
   let discriminator = '';
-  if (tribISSQN === '7') {
-    discriminator = requiredTextEl('cPaisResult', trib.cPaisResult ?? '1058');
-  } else if (tribISSQN === '4') {
-    discriminator = requiredTextEl('tpImunidade', trib.tpImunidade ?? '1');
-  } else if (tribISSQN === '1' || tribISSQN === '2') {
-    discriminator = requiredTextEl('tpRetISSQN', trib.tpRetISSQN ?? '1');
+  if (tribISSQN === '3') {
+    discriminator = requiredTextEl('cPaisResult', trib.cPaisResult);
+  } else if (tribISSQN === '2') {
+    discriminator = requiredTextEl('tpImunidade', trib.tpImunidade);
   }
 
   return el(
@@ -322,6 +322,7 @@ function buildTribMun(trib: TribMun): string {
     [
       requiredTextEl('tribISSQN', tribISSQN),
       discriminator,
+      requiredTextEl('tpRetISSQN', trib.tpRetISSQN),
       textEl('vBC', trib.vBC ? roundMoney(trib.vBC) : undefined),
       textEl('pAliq', trib.pAliq ? roundRate(trib.pAliq) : undefined),
       textEl('vISSQN', trib.vISSQN ? roundMoney(trib.vISSQN) : undefined),
@@ -356,34 +357,6 @@ function buildTribFed(trib: TribFed): string {
   );
 }
 
-function buildTribNac(trib: TribNac): string {
-  const ibs = trib.IBS
-    ? el(
-        'IBS',
-        [
-          requiredTextEl('CST', trib.IBS.CST),
-          textEl('vBC', trib.IBS.vBC ? roundMoney(trib.IBS.vBC) : undefined),
-          textEl('pAliqEstado', trib.IBS.pAliqEstado ? roundRate(trib.IBS.pAliqEstado) : undefined),
-          textEl('pAliqMunicipio', trib.IBS.pAliqMunicipio ? roundRate(trib.IBS.pAliqMunicipio) : undefined),
-          textEl('vIBSEstado', trib.IBS.vIBSEstado ? roundMoney(trib.IBS.vIBSEstado) : undefined),
-          textEl('vIBSMunicipio', trib.IBS.vIBSMunicipio ? roundMoney(trib.IBS.vIBSMunicipio) : undefined),
-        ].join(''),
-      )
-    : '';
-  const cbs = trib.CBS
-    ? el(
-        'CBS',
-        [
-          requiredTextEl('CST', trib.CBS.CST),
-          textEl('vBC', trib.CBS.vBC ? roundMoney(trib.CBS.vBC) : undefined),
-          textEl('pAliq', trib.CBS.pAliq ? roundRate(trib.CBS.pAliq) : undefined),
-          textEl('vCBS', trib.CBS.vCBS ? roundMoney(trib.CBS.vCBS) : undefined),
-        ].join(''),
-      )
-    : '';
-  return el('tribNac', ibs + cbs);
-}
-
 function buildTotTrib(tot: TotTrib, opSimpNac: string): string {
   const hasExplicitValue =
     tot.vTotTrib !== undefined ||
@@ -416,13 +389,7 @@ function buildTotTrib(tot: TotTrib, opSimpNac: string): string {
     );
   }
 
-  // Fallback obrigatório: totTrib precisa de ao menos um filho.
-  // Não Optante (1): indTotTrib e pTotTribSN são proibidos → usa pTotTrib zerado.
-  // Simples Nacional (2/3): usa indTotTrib=0.
-  if (opSimpNac === '1') {
-    return el('totTrib', el('pTotTrib', requiredTextEl('pTotTribFed', '0.00') + requiredTextEl('pTotTribEst', '0.00') + requiredTextEl('pTotTribMun', '0.00')));
-  }
-  return el('totTrib', requiredTextEl('indTotTrib', '0'));
+  throw new Error(`Campo obrigatorio ausente: totTrib (${opSimpNac})`);
 }
 
 function buildComExt(input: DpsJsonInput, comExt: Partial<ComExt>): string {
@@ -443,6 +410,7 @@ function buildComExt(input: DpsJsonInput, comExt: Partial<ComExt>): string {
 
 export function buildDpsFromJson(input: DpsJsonRequest | string): BuiltDps {
   const request = normalizeRequest(input);
+  validateDpsJsonRequest(request);
   const ambiente = request.ambiente ?? DEFAULT_AMBIENTE;
   const { prestador, servico } = request;
   const emissao = request.emissao;
@@ -457,7 +425,12 @@ export function buildDpsFromJson(input: DpsJsonRequest | string): BuiltDps {
   const prest = el(
     'prest',
     requiredTextEl('CNPJ', prestador.cnpj) +
-      el('regTrib', requiredTextEl('opSimpNac', prestador.opSimpNac) + requiredTextEl('regEspTrib', prestador.regEspTrib)),
+      el(
+        'regTrib',
+        requiredTextEl('opSimpNac', prestador.opSimpNac) +
+          textEl('regApTribSN', prestador.regApTribSN) +
+          requiredTextEl('regEspTrib', prestador.regEspTrib),
+      ),
   );
 
   const cServ = el(
@@ -492,7 +465,6 @@ export function buildDpsFromJson(input: DpsJsonRequest | string): BuiltDps {
     [
       buildTribMun(emissao.tributacaoMunicipal ?? {}),
       emissao.tributacaoFederal ? buildTribFed(emissao.tributacaoFederal) : '',
-      emissao.tribNac ? buildTribNac(emissao.tribNac) : '',
       buildTotTrib(emissao.totTrib ?? {}, prestador.opSimpNac),
     ].join(''),
   );
