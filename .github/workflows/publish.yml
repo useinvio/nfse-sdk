@@ -30,6 +30,9 @@ jobs:
           registry-url: https://registry.npmjs.org
           scope: '@useinvio'
 
+      - name: Install XML tools
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+
       - name: Install dependencies
         run: npm ci
 
