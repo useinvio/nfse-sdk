@@ -1,5 +1,5 @@
 {
-  "name": "@nfse-tools/nfse-sdk",
+  "name": "@useinvio/nfse-sdk",
   "version": "0.2.0",
   "description": "SDK TypeScript para integração técnica com a NFS-e Nacional.",
   "type": "module",
@@ -35,12 +35,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nfse-tools/nfse-sdk.git"
+    "url": "git+https://github.com/useinvio/nfse-sdk.git"
   },
   "bugs": {
-    "url": "https://github.com/nfse-tools/nfse-sdk/issues"
+    "url": "https://github.com/useinvio/nfse-sdk/issues"
   },
-  "homepage": "https://github.com/nfse-tools/nfse-sdk#readme",
+  "homepage": "https://github.com/useinvio/nfse-sdk#readme",
   "license": "MIT",
   "sideEffects": false,
   "publishConfig": {

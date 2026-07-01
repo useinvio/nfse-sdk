@@ -30,6 +30,8 @@ export type {
   Valores,
 } from './dpsJson.js';
 
+export { DpsFiscalValidationError, validateDpsJsonRequest } from './fiscalValidation.js';
+
 export { EmitirNotaError, emitirNfse } from './emissaoNota.js';
 export type { EmitirNotaOptions, NotaInput, ResultadoEmissaoNota } from './emissaoNota.js';
 
