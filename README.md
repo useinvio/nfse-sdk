@@ -6,7 +6,13 @@
 
 SDK TypeScript para integração com a **NFS-e Nacional** (SEFIN).
 
-Cuida de todo o protocolo de comunicação: certificado A1, assinatura XML (XMLDSIG), compactação GZip/Base64, mTLS, envio e consulta. A aplicação que consome o SDK continua responsável pelas regras de negócio — código de serviço, CST, retenções, numeração da DPS.
+Transforme JSON em DPS/NFS-e, assine com XMLDSIG, compacte em GZip/Base64 e transmita por mTLS sem escrever XML fiscal na mão.
+
+O SDK cuida da camada protocolar: certificado A1, montagem de DPS, validações estruturais, assinatura XML, compactação, envio, consulta e normalização de rejeições da SEFIN. A aplicação que consome o SDK continua responsável pelas regras fiscais e de negócio — código de serviço, CST, retenções, carga tributária, série e numeração da DPS.
+
+**Para quem é:** ERPs, SaaS financeiros, plataformas de cobrança, contabilidades digitais e times Node.js/TypeScript que precisam integrar com a NFS-e Nacional.
+
+**O que ele não é:** um motor fiscal, consultor tributário ou substituto da validação contábil do seu produto.
 
 ---
 
@@ -14,6 +20,7 @@ Cuida de todo o protocolo de comunicação: certificado A1, assinatura XML (XMLD
 
 - [Instalação](#instalação)
 - [Quick start](#quick-start)
+- [Por que usar](#por-que-usar)
 - [Escolhendo o ponto de entrada](#escolhendo-o-ponto-de-entrada)
 - [Cliente orientado a recursos](#cliente-orientado-a-recursos)
 - [Certificado A1](#certificado-a1)
@@ -28,6 +35,8 @@ Cuida de todo o protocolo de comunicação: certificado A1, assinatura XML (XMLD
 - [Referência da API](#referência-da-api)
 - [Desenvolvimento](#desenvolvimento)
 - [Publicação no npm](#publicação-no-npm)
+- [Divulgação e exemplos](#divulgação-e-exemplos)
+- [Assistente GPT](#assistente-gpt)
 
 ---
 
@@ -99,6 +108,17 @@ try {
   }
 }
 ```
+
+---
+
+## Por que usar
+
+- Entrada JSON tipada para construir DPS no layout nacional.
+- Assinatura XMLDSIG, GZip/Base64 e mTLS encapsulados em uma API Node.js.
+- Erros oficiais da SEFIN preservados em formato estruturado.
+- Builder separado para inspecionar ou salvar o XML antes de transmitir.
+- Cliente `NfseClient` para configurar certificado, ambiente e defaults uma vez.
+- Validação explícita de campos fiscais obrigatórios, sem defaults silenciosos.
 
 ---
 
@@ -507,6 +527,22 @@ npm publish
 ```
 
 O pacote usa `publishConfig.access = public`, necessário para publicar um pacote escopado público no npm.
+
+---
+
+## Divulgação e exemplos
+
+- Exemplos copiáveis ficam em [`examples/`](./examples).
+- Material de lançamento, mensagens para redes e prompt de landing page ficam em [`docs/launch.md`](./docs/launch.md).
+
+---
+
+## Assistente GPT
+
+Para criar um GPT que ajude outros devs a implementar e documentar esta SDK, use:
+
+- [`docs/gpt-assistant.md`](./docs/gpt-assistant.md): configuracao completa do GPT, instrucoes copiaveis, starters e testes de preview.
+- [`docs/gpt-knowledge.md`](./docs/gpt-knowledge.md): resumo compacto para subir como arquivo de Knowledge.
 
 ---
 

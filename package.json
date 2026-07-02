@@ -1,7 +1,7 @@
 {
   "name": "@useinvio/nfse-sdk",
-  "version": "0.3.0",
-  "description": "SDK TypeScript para integração técnica com a NFS-e Nacional.",
+  "version": "1.0.0",
+  "description": "TypeScript SDK for Brazil's national NFS-e: JSON to DPS/XML, XMLDSIG, GZip/Base64, mTLS and SEFIN errors.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,6 +16,9 @@
     "dist/*.d.ts",
     "dist/*.js",
     "dist/*.js.map",
+    "docs/*.md",
+    "examples/*.ts",
+    "examples/README.md",
     "README.md",
     "JSON_MAPPING.md",
     "LICENSE"
@@ -29,9 +32,18 @@
   "keywords": [
     "nfse",
     "nfs-e",
+    "nfs-e-nacional",
     "nota-fiscal",
+    "nota-fiscal-servico",
+    "dps",
     "sefin",
-    "sped"
+    "sped",
+    "xml-dsig",
+    "xmldsig",
+    "mtls",
+    "typescript",
+    "brazil",
+    "erp"
   ],
   "repository": {
     "type": "git",
