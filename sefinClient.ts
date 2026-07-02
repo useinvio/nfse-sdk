@@ -3,6 +3,9 @@ import { resolveSefinBaseUrl } from './config.js';
 import type { PfxMaterial } from './loadPfx.js';
 import type { Ambiente } from './config.js';
 
+/** Evita que uma conexao travada com o SEFIN prenda um worker indefinidamente. */
+const SEFIN_REQUEST_TIMEOUT_MS = 60_000;
+
 export interface SefinErro {
   Codigo: string;
   Descricao: string;
@@ -53,6 +56,7 @@ function sefinRequest(opts: RequestOpts, pfx: PfxMaterial, baseOverride?: string
     key: pfx.privateKeyPem,
     cert: pfx.certPem,
     rejectUnauthorized: true,
+    timeout: SEFIN_REQUEST_TIMEOUT_MS,
   };
 
   return new Promise((resolve, reject) => {
@@ -68,6 +72,9 @@ function sefinRequest(opts: RequestOpts, pfx: PfxMaterial, baseOverride?: string
       );
     });
     req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy(new Error(`SEFIN request timed out after ${SEFIN_REQUEST_TIMEOUT_MS}ms`));
+    });
     if (payload != null) req.write(payload);
     req.end();
   });

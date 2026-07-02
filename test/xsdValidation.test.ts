@@ -74,8 +74,7 @@ const request: DpsJsonRequest = {
   },
 };
 
-test('generated DPS XML validates against the official NFS-e Nacional v1.01 XSD', () => {
-  const { xml } = buildDpsFromJson(request);
+function assertValidatesAgainstXsd(xml: string): void {
   const dir = mkdtempSync(join(tmpdir(), 'nfse-sdk-xsd-'));
   const schemaPath = prepareXmllintSchemaDir(dir);
   const xmlPath = join(dir, 'dps.xml');
@@ -84,6 +83,11 @@ test('generated DPS XML validates against the official NFS-e Nacional v1.01 XSD'
   assert.doesNotThrow(() => {
     execFileSync('xmllint', ['--noout', '--schema', schemaPath, xmlPath], { stdio: 'pipe' });
   });
+}
+
+test('generated DPS XML validates against the official NFS-e Nacional v1.01 XSD', () => {
+  const { xml } = buildDpsFromJson(request);
+  assertValidatesAgainstXsd(xml);
 });
 
 test('generated DPS XML with indTotTrib=0 validates for non-Simples providers', () => {
@@ -100,12 +104,95 @@ test('generated DPS XML with indTotTrib=0 validates for non-Simples providers', 
       },
     },
   });
-  const dir = mkdtempSync(join(tmpdir(), 'nfse-sdk-xsd-'));
-  const schemaPath = prepareXmllintSchemaDir(dir);
-  const xmlPath = join(dir, 'dps.xml');
-  writeFileSync(xmlPath, xml);
+  assertValidatesAgainstXsd(xml);
+});
 
-  assert.doesNotThrow(() => {
-    execFileSync('xmllint', ['--noout', '--schema', schemaPath, xmlPath], { stdio: 'pipe' });
+test('generated DPS XML validates for a domestic invoice with tribISSQN=1 and pAliq', () => {
+  const { xml } = buildDpsFromJson({
+    ...request,
+    prestador: {
+      ...request.prestador,
+      opSimpNac: '2',
+    },
+    emissao: {
+      ...request.emissao,
+      comercioExterior: undefined,
+      tributacaoMunicipal: {
+        tribISSQN: '1',
+        tpRetISSQN: '1',
+        pAliq: '2.5',
+      },
+    },
   });
+  assertValidatesAgainstXsd(xml);
+});
+
+test('generated DPS XML validates for PIS/COFINS with rates', () => {
+  const { xml } = buildDpsFromJson({
+    ...request,
+    emissao: {
+      ...request.emissao,
+      tributacaoFederal: {
+        piscofins: {
+          CST: '00',
+          vBCPisCofins: '9000.00',
+          pAliqPis: '0.65',
+          pAliqCofins: '3.00',
+        },
+      },
+    },
+  });
+  assertValidatesAgainstXsd(xml);
+});
+
+test('generated DPS XML validates for the vTotTrib(Fed/Est/Mun) branch', () => {
+  const { xml } = buildDpsFromJson({
+    ...request,
+    emissao: {
+      ...request.emissao,
+      totTrib: {
+        vTotTribFed: '100.00',
+        vTotTribEst: '0',
+        vTotTribMun: '50.00',
+      },
+    },
+  });
+  assertValidatesAgainstXsd(xml);
+});
+
+test('generated DPS XML validates for the pTotTribSN branch (Simples Nacional)', () => {
+  const { xml } = buildDpsFromJson({
+    ...request,
+    prestador: {
+      ...request.prestador,
+      opSimpNac: '2',
+    },
+    emissao: {
+      ...request.emissao,
+      totTrib: {
+        pTotTribSN: '6',
+      },
+    },
+  });
+  assertValidatesAgainstXsd(xml);
+});
+
+test('generated DPS XML validates for a tomador with endNac address', () => {
+  const { xml } = buildDpsFromJson({
+    ...request,
+    emissao: {
+      ...request.emissao,
+      tomador: {
+        CNPJ: '11222333000181',
+        xNome: 'Cliente Exemplo',
+        end: {
+          endNac: { cMun: '4106902', CEP: '80010000' },
+          xLgr: 'Rua Teste',
+          nro: '100',
+          xBairro: 'Centro',
+        },
+      },
+    },
+  });
+  assertValidatesAgainstXsd(xml);
 });

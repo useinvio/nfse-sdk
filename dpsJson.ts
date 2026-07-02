@@ -36,13 +36,34 @@ export interface ComExt {
   cPaisResult?: string;
 }
 
+export interface EnderecoNacional {
+  cMun: string;
+  CEP: string;
+}
+
+export interface EnderecoExterior {
+  cPais: string;
+  cEndPost: string;
+  xCidade: string;
+  xEstProvReg: string;
+}
+
+export interface Endereco {
+  endNac?: EnderecoNacional;
+  endExt?: EnderecoExterior;
+  xLgr: string;
+  nro: string;
+  xCpl?: string;
+  xBairro: string;
+}
+
 export interface Tomador {
   CNPJ?: string;
   CPF?: string;
   NIF?: string;
   cNaoNIF?: string;
   xNome?: string;
-  end?: Record<string, string>;
+  end?: Endereco;
   fone?: string;
   email?: string;
 }
@@ -57,8 +78,6 @@ export interface TribMun {
   tribISSQN?: string;
   cPaisResult?: string;
   tpRetISSQN?: string;
-  vISSQN?: string;
-  vBC?: string;
   pAliq?: string;
   tpImunidade?: string;
 }
@@ -96,10 +115,12 @@ export interface TribNac {
 }
 
 export interface TotTrib {
+  vTotTribFed?: string;
+  vTotTribEst?: string;
+  vTotTribMun?: string;
   pTotTribFed?: string;
   pTotTribEst?: string;
   pTotTribMun?: string;
-  vTotTrib?: string;
   pTotTribSN?: string;
   indTotTrib?: string;
 }
@@ -216,7 +237,7 @@ function roundMoney(value: string | number): string {
 }
 
 function roundRate(value: string | number): string {
-  return Number(value).toFixed(4);
+  return Number(value).toFixed(2);
 }
 
 function roundTaxBurdenRate(value: string | number): string {
@@ -275,15 +296,38 @@ export function buildDpsId(prestador: PrestadorProfile, nDPS: string, serie = pr
   return id;
 }
 
+function buildEndereco(end: Endereco): string {
+  if (!end.endNac && !end.endExt) {
+    throw new Error('tomador.end deve informar endNac ou endExt');
+  }
+  if (end.endNac && end.endExt) {
+    throw new Error('tomador.end deve informar apenas um de: endNac, endExt');
+  }
+
+  const local = end.endNac
+    ? el('endNac', requiredTextEl('cMun', end.endNac.cMun) + requiredTextEl('CEP', end.endNac.CEP))
+    : el(
+        'endExt',
+        requiredTextEl('cPais', end.endExt!.cPais) +
+          requiredTextEl('cEndPost', end.endExt!.cEndPost) +
+          requiredTextEl('xCidade', end.endExt!.xCidade) +
+          requiredTextEl('xEstProvReg', end.endExt!.xEstProvReg),
+      );
+
+  return el(
+    'end',
+    [
+      local,
+      requiredTextEl('xLgr', end.xLgr),
+      requiredTextEl('nro', end.nro),
+      textEl('xCpl', end.xCpl),
+      requiredTextEl('xBairro', end.xBairro),
+    ].join(''),
+  );
+}
+
 function buildTomador(tomador: Tomador): string {
-  const endereco = tomador.end
-    ? el(
-        'end',
-        Object.entries(tomador.end)
-          .map(([key, value]) => textEl(key, value))
-          .join(''),
-      )
-    : '';
+  const endereco = tomador.end ? buildEndereco(tomador.end) : '';
 
   return el(
     'toma',
@@ -323,9 +367,7 @@ function buildTribMun(trib: TribMun): string {
       requiredTextEl('tribISSQN', tribISSQN),
       discriminator,
       requiredTextEl('tpRetISSQN', trib.tpRetISSQN),
-      textEl('vBC', trib.vBC ? roundMoney(trib.vBC) : undefined),
       textEl('pAliq', trib.pAliq ? roundRate(trib.pAliq) : undefined),
-      textEl('vISSQN', trib.vISSQN ? roundMoney(trib.vISSQN) : undefined),
     ].join(''),
   );
 }
@@ -358,38 +400,50 @@ function buildTribFed(trib: TribFed): string {
 }
 
 function buildTotTrib(tot: TotTrib, opSimpNac: string): string {
-  const hasExplicitValue =
-    tot.vTotTrib !== undefined ||
-    tot.pTotTribFed !== undefined ||
-    tot.pTotTribEst !== undefined ||
-    tot.pTotTribMun !== undefined ||
-    tot.pTotTribSN !== undefined ||
-    tot.indTotTrib !== undefined;
+  const hasVTotTrib = tot.vTotTribFed !== undefined || tot.vTotTribEst !== undefined || tot.vTotTribMun !== undefined;
+  const hasPTotTrib = tot.pTotTribFed !== undefined || tot.pTotTribEst !== undefined || tot.pTotTribMun !== undefined;
+  const hasIndTotTrib = tot.indTotTrib !== undefined;
+  const hasPTotTribSN = tot.pTotTribSN !== undefined;
+  const branchCount = [hasVTotTrib, hasPTotTrib, hasIndTotTrib, hasPTotTribSN].filter(Boolean).length;
 
-  if (hasExplicitValue) {
-    const pBlock =
-      tot.pTotTribFed !== undefined || tot.pTotTribEst !== undefined || tot.pTotTribMun !== undefined
-        ? el(
-            'pTotTrib',
-            [
-              textEl('pTotTribFed', tot.pTotTribFed !== undefined ? roundTaxBurdenRate(tot.pTotTribFed) : undefined),
-              textEl('pTotTribEst', tot.pTotTribEst !== undefined ? roundTaxBurdenRate(tot.pTotTribEst) : undefined),
-              textEl('pTotTribMun', tot.pTotTribMun !== undefined ? roundTaxBurdenRate(tot.pTotTribMun) : undefined),
-            ].join(''),
-          )
-        : '';
-    return el(
-      'totTrib',
-      [
-        textEl('vTotTrib', tot.vTotTrib !== undefined ? roundMoney(tot.vTotTrib) : undefined),
-        pBlock,
-        textEl('pTotTribSN', tot.pTotTribSN !== undefined ? roundTaxBurdenRate(tot.pTotTribSN) : undefined),
-        textEl('indTotTrib', tot.indTotTrib),
-      ].join(''),
+  if (branchCount === 0) {
+    throw new Error(`Campo obrigatorio ausente: totTrib (${opSimpNac})`);
+  }
+  if (branchCount > 1) {
+    throw new Error(
+      'emissao.totTrib e um xs:choice na SEFIN: informe exatamente um de vTotTrib(Fed/Est/Mun), pTotTrib(Fed/Est/Mun), indTotTrib ou pTotTribSN',
     );
   }
 
-  throw new Error(`Campo obrigatorio ausente: totTrib (${opSimpNac})`);
+  if (hasVTotTrib) {
+    return el(
+      'totTrib',
+      el(
+        'vTotTrib',
+        requiredTextEl('vTotTribFed', tot.vTotTribFed !== undefined ? roundMoney(tot.vTotTribFed) : undefined) +
+          requiredTextEl('vTotTribEst', tot.vTotTribEst !== undefined ? roundMoney(tot.vTotTribEst) : undefined) +
+          requiredTextEl('vTotTribMun', tot.vTotTribMun !== undefined ? roundMoney(tot.vTotTribMun) : undefined),
+      ),
+    );
+  }
+
+  if (hasPTotTrib) {
+    return el(
+      'totTrib',
+      el(
+        'pTotTrib',
+        requiredTextEl('pTotTribFed', tot.pTotTribFed !== undefined ? roundTaxBurdenRate(tot.pTotTribFed) : undefined) +
+          requiredTextEl('pTotTribEst', tot.pTotTribEst !== undefined ? roundTaxBurdenRate(tot.pTotTribEst) : undefined) +
+          requiredTextEl('pTotTribMun', tot.pTotTribMun !== undefined ? roundTaxBurdenRate(tot.pTotTribMun) : undefined),
+      ),
+    );
+  }
+
+  if (hasIndTotTrib) {
+    return el('totTrib', requiredTextEl('indTotTrib', tot.indTotTrib));
+  }
+
+  return el('totTrib', requiredTextEl('pTotTribSN', tot.pTotTribSN !== undefined ? roundTaxBurdenRate(tot.pTotTribSN) : undefined));
 }
 
 function buildComExt(input: DpsJsonInput, comExt: Partial<ComExt>): string {

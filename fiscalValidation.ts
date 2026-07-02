@@ -152,35 +152,49 @@ function validateTribMun(issues: string[], trib: TribMun | undefined, opSimpNac:
     issue(issues, 'emissao.tributacaoMunicipal.pAliq nao deve ser informado quando prestador.opSimpNac = 1');
   }
 
-  assertDecimal(issues, 'emissao.tributacaoMunicipal.vBC', trib.vBC);
   assertDecimal(issues, 'emissao.tributacaoMunicipal.pAliq', trib.pAliq);
-  assertDecimal(issues, 'emissao.tributacaoMunicipal.vISSQN', trib.vISSQN);
+  if (trib.pAliq !== undefined && Number.isFinite(Number(trib.pAliq)) && Number(trib.pAliq) > 9.99) {
+    issue(issues, 'emissao.tributacaoMunicipal.pAliq deve ser <= 9.99 (TSDec1V2: um digito inteiro, duas casas decimais)');
+  }
+
+  const legacyFields = trib as Record<string, unknown>;
+  if (legacyFields.vBC !== undefined || legacyFields.vISSQN !== undefined) {
+    issue(
+      issues,
+      'emissao.tributacaoMunicipal.vBC/vISSQN nao existem no layout v1.01; a SEFIN calcula a base e o valor do ISSQN',
+    );
+  }
 }
 
 function validateTotTrib(issues: string[], emissao: DpsJsonInput, opSimpNac: string): void {
   const tot = emissao.totTrib;
   if (!tot) {
-    issue(issues, 'emissao.totTrib e obrigatorio; informe vTotTrib, pTotTrib*, pTotTribSN ou indTotTrib=0');
+    issue(issues, 'emissao.totTrib e obrigatorio; informe vTotTrib(Fed/Est/Mun), pTotTrib(Fed/Est/Mun), pTotTribSN ou indTotTrib=0');
     return;
   }
 
-  const hasExplicitValue =
-    tot.vTotTrib !== undefined ||
-    tot.pTotTribFed !== undefined ||
-    tot.pTotTribEst !== undefined ||
-    tot.pTotTribMun !== undefined ||
-    tot.pTotTribSN !== undefined ||
-    tot.indTotTrib !== undefined;
+  const hasVTotTrib = tot.vTotTribFed !== undefined || tot.vTotTribEst !== undefined || tot.vTotTribMun !== undefined;
+  const hasPTotTrib = tot.pTotTribFed !== undefined || tot.pTotTribEst !== undefined || tot.pTotTribMun !== undefined;
+  const hasIndTotTrib = tot.indTotTrib !== undefined;
+  const hasPTotTribSN = tot.pTotTribSN !== undefined;
+  const branchCount = [hasVTotTrib, hasPTotTrib, hasIndTotTrib, hasPTotTribSN].filter(Boolean).length;
 
-  if (!hasExplicitValue) {
-    issue(issues, 'emissao.totTrib deve informar vTotTrib, pTotTrib*, pTotTribSN ou indTotTrib=0');
+  if (branchCount === 0) {
+    issue(issues, 'emissao.totTrib deve informar vTotTrib(Fed/Est/Mun), pTotTrib(Fed/Est/Mun), pTotTribSN ou indTotTrib=0');
+  } else if (branchCount > 1) {
+    issue(
+      issues,
+      'emissao.totTrib e um xs:choice na SEFIN: informe exatamente um de vTotTrib(Fed/Est/Mun), pTotTrib(Fed/Est/Mun), indTotTrib ou pTotTribSN',
+    );
   }
 
   if (opSimpNac === '1' && tot.pTotTribSN !== undefined) {
     issue(issues, 'emissao.totTrib.pTotTribSN nao deve ser informado para prestador.opSimpNac = 1');
   }
 
-  assertDecimal(issues, 'emissao.totTrib.vTotTrib', tot.vTotTrib);
+  assertDecimal(issues, 'emissao.totTrib.vTotTribFed', tot.vTotTribFed);
+  assertDecimal(issues, 'emissao.totTrib.vTotTribEst', tot.vTotTribEst);
+  assertDecimal(issues, 'emissao.totTrib.vTotTribMun', tot.vTotTribMun);
   assertDecimal(issues, 'emissao.totTrib.pTotTribFed', tot.pTotTribFed);
   assertDecimal(issues, 'emissao.totTrib.pTotTribEst', tot.pTotTribEst);
   assertDecimal(issues, 'emissao.totTrib.pTotTribMun', tot.pTotTribMun);
