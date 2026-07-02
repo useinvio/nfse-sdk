@@ -107,12 +107,26 @@ aceitos, mas o formato com `valores` e preferencial.
 | `NIF` | Nao | `string` | Numero de identificacao fiscal estrangeiro. |
 | `cNaoNIF` | Nao | `string` | Motivo/codigo de nao informacao do NIF. |
 | `xNome` | Sim, se `tomador` existir | `string` | Nome ou razao social do tomador. |
-| `end` | Nao | `Record<string, string>` | Endereco. Cada chave vira uma tag XML dentro de `end`. |
+| `end` | Nao | `Endereco` | Endereco. Veja `Endereco` abaixo. |
 | `fone` | Nao | `string` | Telefone. |
 | `email` | Nao | `string` | Email. |
 
 Quando `tomador` for informado, use exatamente um identificador entre `CNPJ`,
 `CPF`, `NIF` e `cNaoNIF`.
+
+### `Endereco`
+
+| Campo | Obrigatorio | Tipo | Descricao |
+| --- | --- | --- | --- |
+| `endNac` | Condicional | `{ cMun: string; CEP: string }` | Endereco nacional. Use exatamente um entre `endNac` e `endExt`. |
+| `endExt` | Condicional | `{ cPais: string; cEndPost: string; xCidade: string; xEstProvReg: string }` | Endereco no exterior. |
+| `xLgr` | Sim | `string` | Logradouro. |
+| `nro` | Sim | `string` | Numero. |
+| `xCpl` | Nao | `string` | Complemento. |
+| `xBairro` | Sim | `string` | Bairro. |
+
+O XSD exige `endNac` ou `endExt` antes de `xLgr`/`nro`/`xCpl`/`xBairro`; a SDK
+rejeita `end` se nenhum ou ambos forem informados.
 
 ## `intermediario`
 
@@ -132,9 +146,7 @@ Quando `intermediario` for informado, use exatamente um identificador entre
 | `tribISSQN` | Sim | `string` | Indicador de tributacao do ISSQN (`1`, `2`, `3` ou `4`). |
 | `cPaisResult` | Condicional | `string` | Codigo ISO-3166 alpha-2 do pais de resultado. Obrigatorio somente quando `tribISSQN = "3"` exportacao. |
 | `tpRetISSQN` | Sim | `string` | Tipo de retencao do ISSQN (`1`, `2` ou `3`). |
-| `vISSQN` | Nao | `string` | Valor do ISSQN. Serializado com duas casas decimais. |
-| `vBC` | Nao | `string` | Base de calculo do ISSQN. Serializada com duas casas decimais. |
-| `pAliq` | Nao | `string` | Aliquota do ISSQN. Serializada com quatro casas decimais. |
+| `pAliq` | Nao | `string` | Aliquota do ISSQN. Serializada com duas casas decimais; maximo `9.99` (um digito inteiro). |
 | `tpImunidade` | Condicional | `string` | Tipo de imunidade. Obrigatorio somente quando `tribISSQN = "2"`. |
 
 Regras adicionais:
@@ -142,6 +154,8 @@ Regras adicionais:
 - `pAliq` e bloqueado quando `prestador.opSimpNac = "1"`.
 - `cPaisResult` e bloqueado quando `tribISSQN` nao for exportacao (`"3"`).
 - `tpImunidade` e bloqueado quando `tribISSQN` nao for imunidade (`"2"`).
+- `vBC` e `vISSQN` nao existem no layout v1.01 (a SEFIN calcula a base e o
+  valor do ISSQN); envia-los gera erro de validacao.
 
 ## `tributacaoFederal`
 
@@ -158,8 +172,8 @@ Regras adicionais:
 | --- | --- | --- | --- |
 | `CST` | Sim, se `piscofins` existir | `string` | CST de PIS/COFINS. |
 | `vBCPisCofins` | Nao | `string` | Base de calculo de PIS/COFINS. Serializada com duas casas decimais. |
-| `pAliqPis` | Nao | `string` | Aliquota de PIS. Serializada com quatro casas decimais. |
-| `pAliqCofins` | Nao | `string` | Aliquota de COFINS. Serializada com quatro casas decimais. |
+| `pAliqPis` | Nao | `string` | Aliquota de PIS. Serializada com duas casas decimais. |
+| `pAliqCofins` | Nao | `string` | Aliquota de COFINS. Serializada com duas casas decimais. |
 | `vPis` | Nao | `string` | Valor de PIS. Serializado com duas casas decimais. |
 | `vCofins` | Nao | `string` | Valor de COFINS. Serializado com duas casas decimais. |
 | `tpRetPisCofins` | Nao | `string` | Tipo de retencao de PIS/COFINS. |
@@ -202,22 +216,28 @@ ainda nao implementa esse bloco.
 
 ## `totTrib`
 
+`totTrib` e um `xs:choice` no XSD: informe exatamente **um** dos quatro grupos
+abaixo. A SDK rejeita zero ou mais de um grupo preenchido.
+
 | Campo | Obrigatorio | Tipo | Descricao |
 | --- | --- | --- | --- |
+| `vTotTribFed` | Condicional | `string` | Valor aproximado de tributos federais. Serializado com duas casas decimais. |
+| `vTotTribEst` | Condicional | `string` | Valor aproximado de tributos estaduais. Serializado com duas casas decimais. |
+| `vTotTribMun` | Condicional | `string` | Valor aproximado de tributos municipais. Serializado com duas casas decimais. |
 | `pTotTribFed` | Condicional | `string` | Percentual aproximado de tributos federais. Serializado com duas casas decimais. |
 | `pTotTribEst` | Condicional | `string` | Percentual aproximado de tributos estaduais. Serializado com duas casas decimais. |
 | `pTotTribMun` | Condicional | `string` | Percentual aproximado de tributos municipais. Serializado com duas casas decimais. |
-| `vTotTrib` | Condicional | `string` | Valor total aproximado de tributos. Serializado com duas casas decimais. |
 | `pTotTribSN` | Condicional | `string` | Percentual aproximado de tributos no Simples Nacional. Nao informe quando `prestador.opSimpNac = "1"`. |
 | `indTotTrib` | Condicional | `string` | Indicador oficial para nao informar valor estimado. Use `0` quando nao houver estimativa aproximada. |
 
-Informe ao menos uma forma de totalizacao: `vTotTrib`, grupo `pTotTrib*`,
-`pTotTribSN` ou `indTotTrib=0`.
+Informe ao menos uma forma de totalizacao: grupo `vTotTrib*` (Fed+Est+Mun),
+grupo `pTotTrib*` (Fed+Est+Mun), `pTotTribSN` ou `indTotTrib=0`. Ao escolher o
+grupo `vTotTrib*` ou `pTotTrib*`, os tres campos (Fed/Est/Mun) sao obrigatorios.
 
 ## Regras de formatacao
 
 - Valores monetarios sao serializados com duas casas decimais.
-- Aliquotas sao serializadas com quatro casas decimais.
+- Aliquotas (`pAliq`, `pAliqPis`, `pAliqCofins`) sao serializadas com duas casas decimais.
 - Percentuais de carga tributaria em `totTrib` sao serializados com duas casas decimais.
 - Campos vazios, `undefined` ou `null` nao geram tags XML opcionais.
 - Campos obrigatorios ausentes geram erro antes da DPS ser retornada.

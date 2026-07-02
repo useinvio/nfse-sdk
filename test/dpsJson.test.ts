@@ -102,7 +102,7 @@ test('buildDpsFromJson rejects missing fiscal blocks instead of assuming default
     (error) =>
       error instanceof DpsFiscalValidationError &&
       error.issues.includes('emissao.tributacaoMunicipal e obrigatorio; a SDK nao assume tribISSQN/tpRetISSQN por default') &&
-      error.issues.includes('emissao.totTrib e obrigatorio; informe vTotTrib, pTotTrib*, pTotTribSN ou indTotTrib=0'),
+      error.issues.includes('emissao.totTrib e obrigatorio; informe vTotTrib(Fed/Est/Mun), pTotTrib(Fed/Est/Mun), pTotTribSN ou indTotTrib=0'),
   );
 });
 
