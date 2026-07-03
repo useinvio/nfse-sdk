@@ -4,6 +4,8 @@
 [![npm access](https://img.shields.io/badge/npm-public-brightgreen.svg)](https://www.npmjs.com/package/@useinvio/nfse-sdk)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-339933.svg)](https://nodejs.org/)
 
+[Website](https://sdk.useinvio.com/)
+
 <img width="959" height="296" alt="image" src="https://github.com/user-attachments/assets/d6c45737-e7ca-4ea7-a06f-d93b7c16e4f0" />
 
 ---
@@ -12,7 +14,7 @@ SDK TypeScript para integração com a **NFS-e Nacional** (SEFIN).
 
 Transforme JSON em DPS/NFS-e, assine com XMLDSIG, compacte em GZip/Base64 e transmita por mTLS sem escrever XML fiscal na mão.
 
-O SDK cuida da camada protocolar: certificado A1, montagem de DPS, validações estruturais, assinatura XML, compactação, envio, consulta e normalização de rejeições da SEFIN. A aplicação que consome o SDK continua responsável pelas regras fiscais e de negócio — código de serviço, CST, retenções, carga tributária, série e numeração da DPS.
+O SDK cuida da camada protocolar: certificado A1, montagem de DPS, validações estruturais, assinatura XML, compactação, envio, consulta e normalização de rejeições da SEFIN. A aplicação [...]
 
 **Para quem é:** ERPs, SaaS financeiros, plataformas de cobrança, contabilidades digitais e times Node.js/TypeScript que precisam integrar com a NFS-e Nacional.
 
@@ -271,7 +273,7 @@ await emitirNfse(dpsXml, pfx, { dpsId: 'DPS0001', ambiente: 'restrita' });
 Use quando a aplicação mantém os perfis de prestador e serviço e quer que a SDK monte o XML.
 
 Para a referência completa de campos aceitos no JSON, consulte [JSON_MAPPING.md](./JSON_MAPPING.md).
-O builder valida formatos e combinações mínimas antes de gerar XML, mas não escolhe códigos fiscais por você. Campos como `tributacaoMunicipal` e `totTrib` precisam ser informados explicitamente; a SDK não assume tributação nem carga tributária por default.
+O builder valida formatos e combinações mínimas antes de gerar XML, mas não escolhe códigos fiscais por você. Campos como `tributacaoMunicipal` e `totTrib` precisam ser informados explicita[...]
 
 ```ts
 import { emitirNfse, loadPfx, type DpsJsonRequest } from '@useinvio/nfse-sdk';
@@ -504,7 +506,7 @@ npm run build       # compila para dist/
 npm test            # build + tipos + testes unitários
 ```
 
-`npm test` também valida uma DPS gerada contra os XSD oficiais em `schemas/nfse/v1.01/Schemas/1.01`. Para compatibilidade com `xmllint`, o teste corrige em uma cópia temporária a âncora regex de `TSSerieDPS` presente no XSD oficial; os arquivos baixados do gov.br ficam preservados sem alteração.
+`npm test` também valida uma DPS gerada contra os XSD oficiais em `schemas/nfse/v1.01/Schemas/1.01`. Para compatibilidade com `xmllint`, o teste corrige em uma cópia temporária a âncora regex[...]
 
 ### Uso local em outro projeto
 
@@ -556,3 +558,4 @@ Para criar um GPT que ajude outros devs a implementar e documentar esta SDK, use
 - Funções pequenas, testáveis e reutilizáveis.
 - Erros oficiais da SEFIN são preservados na íntegra, não engolidos.
 - O SDK transporta declarações fiscais; não valida se estão contabilmente corretas.
+
