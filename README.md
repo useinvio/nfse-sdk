@@ -4,6 +4,10 @@
 [![npm access](https://img.shields.io/badge/npm-public-brightgreen.svg)](https://www.npmjs.com/package/@useinvio/nfse-sdk)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-339933.svg)](https://nodejs.org/)
 
+<img width="959" height="296" alt="image" src="https://github.com/user-attachments/assets/d6c45737-e7ca-4ea7-a06f-d93b7c16e4f0" />
+
+---
+
 SDK TypeScript para integração com a **NFS-e Nacional** (SEFIN).
 
 Transforme JSON em DPS/NFS-e, assine com XMLDSIG, compacte em GZip/Base64 e transmita por mTLS sem escrever XML fiscal na mão.
