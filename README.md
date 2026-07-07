@@ -6,6 +6,8 @@
 
 [Website](https://sdk.useinvio.com/)
 
+[English version](./ENGLISH.md)
+
 <img width="959" height="296" alt="image" src="https://github.com/user-attachments/assets/d6c45737-e7ca-4ea7-a06f-d93b7c16e4f0" />
 
 ---
@@ -558,4 +560,3 @@ Para criar um GPT que ajude outros devs a implementar e documentar esta SDK, use
 - Funções pequenas, testáveis e reutilizáveis.
 - Erros oficiais da SEFIN são preservados na íntegra, não engolidos.
 - O SDK transporta declarações fiscais; não valida se estão contabilmente corretas.
-
