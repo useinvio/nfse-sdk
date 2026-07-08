@@ -21,6 +21,7 @@
     "examples/README.md",
     "README.md",
     "JSON_MAPPING.md",
+    "llms.txt",
     "LICENSE"
   ],
   "scripts": {

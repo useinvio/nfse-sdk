@@ -1,0 +1,78 @@
+# @useinvio/nfse-sdk LLM Guide
+
+This is a TypeScript SDK for Brazil's NFS-e Nacional (SEFIN). It handles the protocol layer for issuing and querying national service invoices: DPS JSON/XML generation, XMLDSIG signing, GZip/Base64 compression, mTLS transport, and structured SEFIN rejection extraction.
+
+It is not a fiscal decision engine. Do not infer tax codes, accounting rules, tenant state, invoice numbering policy, or legal advice from this SDK.
+
+## Start Here
+
+- `README.md`: primary Portuguese documentation and examples.
+- `ENGLISH.md`: English documentation with the same conceptual flow.
+- `index.ts`: public exports. Treat this as the supported API surface.
+- `examples/`: runnable usage examples.
+- `JSON_MAPPING.md`: mapping notes for the declarative JSON input.
+- `test/`: behavior examples and regression coverage.
+
+## Public Entry Points
+
+- `NfseClient`: resource-oriented client. Configure certificate, environment, and defaults once, then use `client.invoices.create(...)`, `client.invoices.buildDpsJson(...)`, and `client.invoices.get(...)`.
+- `emitirNfse(input, pfx, options?)`: issue an invoice from a DPS XML string or `DpsJsonRequest`.
+- `buildDpsFromJson(input)`: build unsigned DPS XML from declarative JSON.
+- `buildDpsId(prestador, nDPS, serie?)`: derive the 45-character DPS Id.
+- `loadPfx(...)` and `loadPfxFromBuffer(...)`: extract key/certificate material from an A1/PFX certificate.
+- `consultarNfse(...)`, `enviarEvento(...)`, `extrairErros(...)`: lower-level SEFIN helpers.
+- `gzipBase64(...)`, `gunzipBase64(...)`, `signDps(...)`, `verifyDps(...)`: protocol utilities for custom flows.
+
+## File Map
+
+- `client.ts`: friendly client API and default merging.
+- `emissaoNota.ts`: central issue flow: prepare input, sign DPS, gzip/base64, transmit, unzip authorized XML, normalize errors.
+- `dpsJson.ts`: JSON-to-DPS XML builder, XML escaping, DPS Id generation, value formatting, and XML block assembly.
+- `fiscalValidation.ts`: structural and layout-oriented validation for the JSON input. This intentionally rejects unsupported or ambiguous fiscal shapes.
+- `sefinClient.ts`: HTTPS mTLS requests to SEFIN, response parsing, error normalization, invoice query, issue transport, and event transport.
+- `config.ts`: SEFIN base URLs, environment names, and `tpAmb` mapping.
+- `loadPfx.ts`: PFX/A1 certificate decoding with `node-forge`.
+- `signXml.ts`: XMLDSIG signing and verification helpers.
+- `gzipB64.ts`: GZip/Base64 helpers.
+
+## Core Data Shape
+
+Declarative issuing uses `DpsJsonRequest`:
+
+- `ambiente`: optional, `restrita` or `producao`; defaults to `restrita`.
+- `prestador`: issuer profile such as `cnpj`, `cLocEmi`, `serie`, `opSimpNac`, and `regEspTrib`.
+- `servico`: service defaults such as `cTribNac`, `xDescServ`, `cLocPrestacao`, and optional `cNBS`.
+- `emissao`: invoice-specific data such as `nDPS`, dates, `valores`, optional parties, municipal/federal taxation blocks, and `totTrib`.
+
+Keep values as strings when they represent fiscal codes, identifiers, decimals, or exact XML values. Many fields are numeric-looking but must preserve leading zeroes.
+
+## Important Invariants
+
+- Node.js >= 20 and ESM are expected.
+- Public imports should come from the package root (`index.ts` exports), not internal files, unless you are editing the SDK itself.
+- `DEFAULT_AMBIENTE` is `restrita`; `NfseClient` also accepts `sandbox` and `production` aliases.
+- `buildDpsFromJson` validates first via `validateDpsJsonRequest`.
+- The SDK intentionally avoids silent fiscal defaults for required tax fields such as `tributacaoMunicipal` and `totTrib`.
+- `emissao.totTrib` follows an `xs:choice`: provide exactly one branch among value totals, percentage totals, `indTotTrib`, or `pTotTribSN`.
+- `buildDpsId` must return a 45-character Id beginning with `DPS`.
+- `emitirNfse` signs the DPS before transport and throws `EmitirNotaError` when SEFIN rejects or no authorized XML is returned.
+- `sefinClient.ts` uses PEM key/cert material for mTLS, not the raw PFX in the Node TLS handshake.
+
+## Change Guidance for LLMs
+
+- Preserve the public API names exported by `index.ts` unless the task explicitly asks for a breaking change.
+- Prefer adding or adjusting focused tests in `test/` when changing XML generation, validation, signing, transport parsing, or client defaults.
+- When adding support for a new NFS-e layout field, update the TypeScript interface, validation rules, builder output, docs/examples, and tests together.
+- Do not add fiscal assumptions to make examples pass. Required fiscal choices should stay explicit in user input.
+- Be careful with XML ordering. The generated order should follow the SEFIN schema, and tests may compare XML snippets.
+- Do not hand-wave certificate handling. PFX content may arrive as a `Buffer` or base64 string.
+- Network calls to SEFIN should stay isolated in `sefinClient.ts` so tests can mock transport boundaries.
+
+## Useful Commands
+
+```bash
+npm run build
+npm run typecheck
+npm test
+```
+
