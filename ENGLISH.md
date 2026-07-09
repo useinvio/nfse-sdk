@@ -436,7 +436,7 @@ const baseUrl = resolveSefinBaseUrl('restrita');
 
 ## SEFIN Observability
 
-The SDK can emit latency metrics for mTLS calls made to SEFIN, including `p50Ms`, `p95Ms`, and `p99Ms` by operation and environment. These metrics measure the external SEFIN round-trip, separate from your API's total request latency.
+The SDK can emit latency metrics for mTLS calls made to SEFIN when `NFSE_SEFIN_LATENCY_METRICS=1` is configured. Percentiles such as `p50Ms`, `p95Ms`, and `p99Ms` are off by default and require `includePercentiles: true`. These metrics measure the external SEFIN round-trip, separate from your API's total request latency.
 
 Read the full guide in [docs/METRICS.md](./docs/METRICS.md).
 
@@ -454,7 +454,7 @@ Read the full guide in [docs/METRICS.md](./docs/METRICS.md).
 | `enviarEvento(xmlGzipB64, pfx, chaveAcesso, ambiente?)` | Sends a fiscal event such as cancellation. |
 | `buildDpsFromJson(invoice)` | Builds DPS XML without signing or sending it. |
 | `setSefinRequestObserver(observer)` | Registers a hook for SEFIN call latency/status observations. |
-| `createSefinLatencyTracker(options?)` | Aggregates recent samples and calculates `p50Ms`, `p95Ms`, and `p99Ms`. |
+| `createSefinLatencyTracker(options?)` | Aggregates recent samples and can calculate percentiles when `includePercentiles` is enabled. |
 
 ### Certificates
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createSefinLatencyTracker, extrairErros } from '../index.js';
+import { createSefinLatencyTracker, extrairErros, isSefinLatencyMetricsEnabled } from '../index.js';
 import type { SefinRequestMetric } from '../index.js';
 
 test('extrairErros returns an empty list for empty bodies', () => {
@@ -64,7 +64,16 @@ function sefinMetric(durationMs: number, overrides: Partial<SefinRequestMetric> 
   };
 }
 
-test('createSefinLatencyTracker summarizes P99 by operation and ambiente', () => {
+test('isSefinLatencyMetricsEnabled only enables metrics for explicit truthy values', () => {
+  assert.equal(isSefinLatencyMetricsEnabled({}), false);
+  assert.equal(isSefinLatencyMetricsEnabled({ NFSE_SEFIN_LATENCY_METRICS: '0' }), false);
+  assert.equal(isSefinLatencyMetricsEnabled({ NFSE_SEFIN_LATENCY_METRICS: 'false' }), false);
+  assert.equal(isSefinLatencyMetricsEnabled({ NFSE_SEFIN_LATENCY_METRICS: '1' }), true);
+  assert.equal(isSefinLatencyMetricsEnabled({ NFSE_SEFIN_LATENCY_METRICS: 'true' }), true);
+  assert.equal(isSefinLatencyMetricsEnabled({ NFSE_SEFIN_LATENCY_METRICS: 'ON' }), true);
+});
+
+test('createSefinLatencyTracker summarizes latency without percentiles by default', () => {
   const tracker = createSefinLatencyTracker();
 
   for (let durationMs = 1; durationMs <= 100; durationMs += 1) {
@@ -76,6 +85,27 @@ test('createSefinLatencyTracker summarizes P99 by operation and ambiente', () =>
 
   assert.equal(snapshot.series.length, 1);
   assert.deepEqual(snapshot.series[0], {
+    operation: 'consultar_nfse',
+    ambiente: 'restrita',
+    count: 101,
+    successCount: 100,
+    errorCount: 1,
+    sampleCount: 101,
+    minMs: 1,
+    maxMs: 250,
+    avgMs: 5300 / 101,
+  });
+});
+
+test('createSefinLatencyTracker includes percentile metrics when explicitly enabled', () => {
+  const tracker = createSefinLatencyTracker({ includePercentiles: true });
+
+  for (let durationMs = 1; durationMs <= 100; durationMs += 1) {
+    tracker.observe(sefinMetric(durationMs));
+  }
+  tracker.observe(sefinMetric(250, { success: false, status: 503 }));
+
+  assert.deepEqual(tracker.snapshot().series[0], {
     operation: 'consultar_nfse',
     ambiente: 'restrita',
     count: 101,
@@ -109,9 +139,6 @@ test('createSefinLatencyTracker keeps a rolling sample window per series', () =>
     minMs: 20,
     maxMs: 40,
     avgMs: 30,
-    p50Ms: 30,
-    p95Ms: 40,
-    p99Ms: 40,
   });
 
   tracker.reset();

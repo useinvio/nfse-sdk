@@ -441,7 +441,7 @@ const baseUrl = resolveSefinBaseUrl('restrita');
 
 ## Observabilidade da SEFIN
 
-O SDK pode emitir métricas de latência das chamadas mTLS feitas contra a SEFIN, incluindo `p50Ms`, `p95Ms` e `p99Ms` por operação e ambiente. Essas métricas medem o round-trip externo da SEFIN, separado da latência total da sua API.
+O SDK pode emitir métricas de latência das chamadas mTLS feitas contra a SEFIN quando `NFSE_SEFIN_LATENCY_METRICS=1` está configurada. Por padrão, percentis como `p50Ms`, `p95Ms` e `p99Ms` ficam desligados e precisam de `includePercentiles: true`. Essas métricas medem o round-trip externo da SEFIN, separado da latência total da sua API.
 
 Leia o guia completo em [docs/METRICS.md](./docs/METRICS.md).
 
@@ -459,7 +459,7 @@ Leia o guia completo em [docs/METRICS.md](./docs/METRICS.md).
 | `enviarEvento(xmlGzipB64, pfx, chaveAcesso, ambiente?)` | Envia evento fiscal (cancelamento, etc.). |
 | `buildDpsFromJson(nota)` | Monta o XML da DPS sem assinar nem enviar. |
 | `setSefinRequestObserver(observer)` | Registra um hook para observar latência/status das chamadas à SEFIN. |
-| `createSefinLatencyTracker(options?)` | Agrega amostras recentes e calcula `p50Ms`, `p95Ms` e `p99Ms`. |
+| `createSefinLatencyTracker(options?)` | Agrega amostras recentes e pode calcular percentis quando `includePercentiles` estiver habilitado. |
 
 ### Certificado
 

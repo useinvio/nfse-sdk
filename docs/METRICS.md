@@ -1,13 +1,13 @@
 # Metricas da SEFIN
 
-O SDK pode medir a latencia das chamadas mTLS feitas contra a SEFIN Nacional. Essas metricas ajudam a responder perguntas como:
+O SDK pode medir a latencia das chamadas mTLS feitas contra a SEFIN Nacional. A coleta fica desligada por padrao e deve ser habilitada com a variavel de ambiente `NFSE_SEFIN_LATENCY_METRICS=1`. Essas metricas ajudam a responder perguntas como:
 
 - qual e o P99 de `POST /nfse` no ambiente restrito?
 - as consultas por chave estao ficando lentas?
 - quantas chamadas externas falharam no processo atual?
 - a lentidao vem da SEFIN ou da minha API?
 
-As metricas sao emitidas pelo SDK, mas nao sao enviadas para nenhum servico automaticamente. A aplicacao que usa o SDK decide se quer guardar em memoria, registrar em logs, exportar para Prometheus, enviar para Datadog/New Relic/Grafana, ou expor em um endpoint interno.
+As metricas sao emitidas pelo SDK apenas quando `NFSE_SEFIN_LATENCY_METRICS` esta habilitada, e nao sao enviadas para nenhum servico automaticamente. A aplicacao que usa o SDK decide se quer guardar em memoria, registrar em logs, exportar para Prometheus, enviar para Datadog/New Relic/Grafana, ou expor em um endpoint interno.
 
 ## O que e medido
 
@@ -49,6 +49,16 @@ latencia SEFIN medida pelo SDK:   4200ms
 
 Tambem nao ha persistencia automatica. O agregador em memoria zera quando o processo Node reinicia.
 
+## Habilitando a coleta
+
+Configure a variavel de ambiente no processo que usa o SDK:
+
+```sh
+NFSE_SEFIN_LATENCY_METRICS=1
+```
+
+Valores aceitos para habilitar: `1`, `true`, `yes` e `on`. Sem essa variavel, ou com outro valor, o SDK nao chama o observer de metricas.
+
 ## Uso basico
 
 Registre um observer uma vez na inicializacao da aplicacao, antes de fazer chamadas como `emitirNfse`, `consultarNfse` ou `enviarEvento`.
@@ -77,6 +87,38 @@ console.log(snapshot.series);
 ```
 
 Exemplo de retorno:
+
+```ts
+{
+  generatedAt: '2026-07-09T12:00:00.000Z',
+  series: [
+    {
+      operation: 'transmitir_dps',
+      ambiente: 'restrita',
+      count: 120,
+      successCount: 118,
+      errorCount: 2,
+      sampleCount: 120,
+      minMs: 180,
+      maxMs: 8100,
+      avgMs: 940.2
+    }
+  ]
+}
+```
+
+## Percentis opcionais
+
+Metricas de percentil ficam desligadas por padrao. Para incluir `p50Ms`, `p95Ms` e `p99Ms` no snapshot, habilite explicitamente `includePercentiles`:
+
+```ts
+export const sefinLatency = createSefinLatencyTracker({
+  maxSamplesPerSeries: 1000,
+  includePercentiles: true,
+});
+```
+
+Com percentis habilitados, o snapshot inclui os campos extras:
 
 ```ts
 {
@@ -132,7 +174,7 @@ const sefinLatency = createSefinLatencyTracker({
 });
 ```
 
-Com `5000`, cada combinacao `operation + ambiente` calcula os percentis usando no maximo as ultimas 5000 amostras daquela serie. O contador `count` continua acumulando o total observado desde o ultimo `reset`, mas `p50Ms`, `p95Ms`, `p99Ms`, `minMs`, `maxMs` e `avgMs` usam a janela de amostras mantida em memoria.
+Com `5000`, cada combinacao `operation + ambiente` calcula `minMs`, `maxMs`, `avgMs` e, quando habilitados, os percentis usando no maximo as ultimas 5000 amostras daquela serie. O contador `count` continua acumulando o total observado desde o ultimo `reset`.
 
 ## Logs estruturados
 
@@ -177,10 +219,12 @@ O SDK nao depende de Prometheus. Para Prometheus, voce pode converter o snapshot
 Exemplo conceitual:
 
 ```txt
-sefin_request_duration_p99_ms{operation="transmitir_dps",ambiente="restrita"} 5100
+sefin_request_duration_avg_ms{operation="transmitir_dps",ambiente="restrita"} 940.2
 sefin_request_success_total{operation="transmitir_dps",ambiente="restrita"} 118
 sefin_request_error_total{operation="transmitir_dps",ambiente="restrita"} 2
 ```
+
+Exporte `sefin_request_duration_p99_ms` apenas quando `includePercentiles: true` estiver habilitado.
 
 Se voce ja usa OpenTelemetry, Datadog, New Relic, Grafana Cloud ou outro coletor, use `setSefinRequestObserver` como ponto de saida e envie `durationMs`, `operation`, `ambiente`, `status` e `success`.
 
@@ -199,7 +243,7 @@ Isso remove as series e amostras em memoria. Use com cuidado em producao, porque
 - Registre o observer uma unica vez por processo.
 - Nao crie um tracker novo a cada request HTTP.
 - Use `maxSamplesPerSeries` conforme o volume esperado e a memoria disponivel.
+- Habilite `includePercentiles` apenas quando sua operacao realmente precisar de P50/P95/P99.
 - Lembre que processos diferentes tem snapshots diferentes. Em varios containers/replicas, cada processo enxerga apenas as chamadas que ele executou.
 - Para historico entre deploys/restarts, envie as metricas para um sistema externo.
 - Para saber os erros oficiais mais comuns da SEFIN, use a resposta de negocio e `extrairErros(body)` no seu fluxo. As metricas de latencia focam em tempo, status e sucesso/falha da chamada externa.
-

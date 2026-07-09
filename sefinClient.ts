@@ -6,6 +6,7 @@ import type { Ambiente } from './config.js';
 
 /** Evita que uma conexao travada com o SEFIN prenda um worker indefinidamente. */
 const SEFIN_REQUEST_TIMEOUT_MS = 60_000;
+export const SEFIN_LATENCY_METRICS_ENV = 'NFSE_SEFIN_LATENCY_METRICS';
 
 export interface SefinErro {
   Codigo: string;
@@ -38,9 +39,11 @@ export type SefinRequestObserver = (metric: SefinRequestMetric) => void;
 export interface SefinLatencyTrackerOptions {
   /**
    * Maximum number of recent latency samples kept for each operation/environment
-   * series. P99 is calculated over this rolling window.
+   * series. Min, max, average, and optional percentiles use this rolling window.
    */
   maxSamplesPerSeries?: number;
+  /** Percentile metrics are intentionally opt-in because they keep extra series in exporters. */
+  includePercentiles?: boolean;
 }
 
 export interface SefinLatencySeriesSnapshot {
@@ -53,9 +56,9 @@ export interface SefinLatencySeriesSnapshot {
   minMs: number;
   maxMs: number;
   avgMs: number;
-  p50Ms: number;
-  p95Ms: number;
-  p99Ms: number;
+  p50Ms?: number;
+  p95Ms?: number;
+  p99Ms?: number;
 }
 
 export interface SefinLatencySnapshot {
@@ -90,6 +93,11 @@ interface RequestMetricOpts {
 
 let sefinRequestObserver: SefinRequestObserver | undefined;
 
+export function isSefinLatencyMetricsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env[SEFIN_LATENCY_METRICS_ENV]?.trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+}
+
 export function setSefinRequestObserver(observer: SefinRequestObserver | undefined): void {
   sefinRequestObserver = observer;
 }
@@ -99,6 +107,8 @@ export function getSefinRequestObserver(): SefinRequestObserver | undefined {
 }
 
 function notifySefinRequestObserver(metric: SefinRequestMetric): void {
+  if (!isSefinLatencyMetricsEnabled()) return;
+
   try {
     sefinRequestObserver?.(metric);
   } catch {
@@ -118,6 +128,7 @@ function trackerKey(metric: Pick<SefinRequestMetric, 'operation' | 'ambiente'>):
 
 export function createSefinLatencyTracker(options: SefinLatencyTrackerOptions = {}): SefinLatencyTracker {
   const maxSamplesPerSeries = Math.max(1, Math.floor(options.maxSamplesPerSeries ?? 1_000));
+  const includePercentiles = options.includePercentiles === true;
   const series = new Map<string, {
     operation: SefinOperation;
     ambiente?: Ambiente;
@@ -158,7 +169,7 @@ export function createSefinLatencyTracker(options: SefinLatencyTrackerOptions = 
           const sortedDurations = [...bucket.durations].sort((a, b) => a - b);
           const total = sortedDurations.reduce((sum, value) => sum + value, 0);
 
-          return {
+          const snapshot: SefinLatencySeriesSnapshot = {
             operation: bucket.operation,
             ambiente: bucket.ambiente,
             count: bucket.count,
@@ -168,10 +179,15 @@ export function createSefinLatencyTracker(options: SefinLatencyTrackerOptions = 
             minMs: sortedDurations[0] ?? 0,
             maxMs: sortedDurations.at(-1) ?? 0,
             avgMs: sortedDurations.length ? total / sortedDurations.length : 0,
-            p50Ms: percentile(sortedDurations, 0.50),
-            p95Ms: percentile(sortedDurations, 0.95),
-            p99Ms: percentile(sortedDurations, 0.99),
           };
+
+          if (includePercentiles) {
+            snapshot.p50Ms = percentile(sortedDurations, 0.50);
+            snapshot.p95Ms = percentile(sortedDurations, 0.95);
+            snapshot.p99Ms = percentile(sortedDurations, 0.99);
+          }
+
+          return snapshot;
         }).sort((a, b) => (
           a.operation.localeCompare(b.operation) ||
           (a.ambiente ?? '').localeCompare(b.ambiente ?? '')

@@ -14,6 +14,8 @@ export {
   enviarEvento,
   extrairErros,
   getSefinRequestObserver,
+  isSefinLatencyMetricsEnabled,
+  SEFIN_LATENCY_METRICS_ENV,
   setSefinRequestObserver,
 } from './sefinClient.js';
 export type {
