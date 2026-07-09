@@ -8,8 +8,25 @@
 export { SEFIN_BASE_URL, TP_AMB, DEFAULT_AMBIENTE, resolveSefinBaseUrl } from './config.js';
 export type { Ambiente } from './config.js';
 
-export { consultarNfse, enviarEvento, extrairErros } from './sefinClient.js';
-export type { SefinErro, SefinResposta } from './sefinClient.js';
+export {
+  consultarNfse,
+  createSefinLatencyTracker,
+  enviarEvento,
+  extrairErros,
+  getSefinRequestObserver,
+  setSefinRequestObserver,
+} from './sefinClient.js';
+export type {
+  SefinErro,
+  SefinLatencySeriesSnapshot,
+  SefinLatencySnapshot,
+  SefinLatencyTracker,
+  SefinLatencyTrackerOptions,
+  SefinOperation,
+  SefinRequestMetric,
+  SefinRequestObserver,
+  SefinResposta,
+} from './sefinClient.js';
 
 export { buildDpsFromJson, buildDpsId } from './dpsJson.js';
 export type {

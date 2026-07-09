@@ -434,6 +434,14 @@ const baseUrl = resolveSefinBaseUrl('restrita');
 
 ---
 
+## SEFIN Observability
+
+The SDK can emit latency metrics for mTLS calls made to SEFIN, including `p50Ms`, `p95Ms`, and `p99Ms` by operation and environment. These metrics measure the external SEFIN round-trip, separate from your API's total request latency.
+
+Read the full guide in [docs/METRICS.md](./docs/METRICS.md).
+
+---
+
 ## API Reference
 
 ### Main APIs
@@ -445,6 +453,8 @@ const baseUrl = resolveSefinBaseUrl('restrita');
 | `consultarNfse(chaveAcesso, pfx, ambiente?)` | Queries an NFS-e by access key. |
 | `enviarEvento(xmlGzipB64, pfx, chaveAcesso, ambiente?)` | Sends a fiscal event such as cancellation. |
 | `buildDpsFromJson(invoice)` | Builds DPS XML without signing or sending it. |
+| `setSefinRequestObserver(observer)` | Registers a hook for SEFIN call latency/status observations. |
+| `createSefinLatencyTracker(options?)` | Aggregates recent samples and calculates `p50Ms`, `p95Ms`, and `p99Ms`. |
 
 ### Certificates
 

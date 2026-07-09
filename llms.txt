@@ -8,6 +8,7 @@ It is not a fiscal decision engine. Do not infer tax codes, accounting rules, te
 
 - `README.md`: primary Portuguese documentation and examples.
 - `ENGLISH.md`: English documentation with the same conceptual flow.
+- `docs/METRICS.md`: detailed SEFIN latency metrics guide, including observer setup, P99 interpretation, in-memory snapshots, and export guidance.
 - `index.ts`: public exports. Treat this as the supported API surface.
 - `examples/`: runnable usage examples.
 - `JSON_MAPPING.md`: mapping notes for the declarative JSON input.
@@ -21,6 +22,7 @@ It is not a fiscal decision engine. Do not infer tax codes, accounting rules, te
 - `buildDpsId(prestador, nDPS, serie?)`: derive the 45-character DPS Id.
 - `loadPfx(...)` and `loadPfxFromBuffer(...)`: extract key/certificate material from an A1/PFX certificate.
 - `consultarNfse(...)`, `enviarEvento(...)`, `extrairErros(...)`: lower-level SEFIN helpers.
+- `setSefinRequestObserver(...)` and `createSefinLatencyTracker(...)`: observe SEFIN round-trip latency and compute rolling `p50Ms`/`p95Ms`/`p99Ms` by operation/environment.
 - `gzipBase64(...)`, `gunzipBase64(...)`, `signDps(...)`, `verifyDps(...)`: protocol utilities for custom flows.
 
 ## File Map
@@ -29,7 +31,7 @@ It is not a fiscal decision engine. Do not infer tax codes, accounting rules, te
 - `emissaoNota.ts`: central issue flow: prepare input, sign DPS, gzip/base64, transmit, unzip authorized XML, normalize errors.
 - `dpsJson.ts`: JSON-to-DPS XML builder, XML escaping, DPS Id generation, value formatting, and XML block assembly.
 - `fiscalValidation.ts`: structural and layout-oriented validation for the JSON input. This intentionally rejects unsupported or ambiguous fiscal shapes.
-- `sefinClient.ts`: HTTPS mTLS requests to SEFIN, response parsing, error normalization, invoice query, issue transport, and event transport.
+- `sefinClient.ts`: HTTPS mTLS requests to SEFIN, latency observation, response parsing, error normalization, invoice query, issue transport, and event transport.
 - `config.ts`: SEFIN base URLs, environment names, and `tpAmb` mapping.
 - `loadPfx.ts`: PFX/A1 certificate decoding with `node-forge`.
 - `signXml.ts`: XMLDSIG signing and verification helpers.
@@ -57,6 +59,7 @@ Keep values as strings when they represent fiscal codes, identifiers, decimals, 
 - `buildDpsId` must return a 45-character Id beginning with `DPS`.
 - `emitirNfse` signs the DPS before transport and throws `EmitirNotaError` when SEFIN rejects or no authorized XML is returned.
 - `sefinClient.ts` uses PEM key/cert material for mTLS, not the raw PFX in the Node TLS handshake.
+- SEFIN latency metrics are emitted for the external request only; keep them separate from API route latency when integrating observability.
 
 ## Change Guidance for LLMs
 
@@ -75,4 +78,3 @@ npm run build
 npm run typecheck
 npm test
 ```
-
