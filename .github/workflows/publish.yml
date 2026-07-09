@@ -1,6 +1,9 @@
 name: Publish
 
 on:
+  push:
+    tags:
+      - '*'
   release:
     types:
       - published
@@ -56,14 +59,16 @@ jobs:
           echo "name=$(node -p 'require(\"./package.json\").name')" >> "$GITHUB_OUTPUT"
           echo "version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
 
-      - name: Check release tag matches package version
-        if: github.event_name == 'release'
+      - name: Check tag matches package version
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref_name }}
         run: |
           package_version="$(node -p 'require("./package.json").version')"
-          release_tag="${{ github.event.release.tag_name }}"
+          release_tag="$RELEASE_TAG"
           if [ "$release_tag" != "$package_version" ] && [ "$release_tag" != "v$package_version" ]; then
             echo "Release tag $release_tag does not match package version $package_version."
-            echo "Create the GitHub release from tag $package_version or v$package_version, or update package.json before releasing."
+            echo "Create the tag $package_version or v$package_version, or update package.json before releasing."
             exit 1
           fi
 
