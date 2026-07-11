@@ -5,12 +5,22 @@
  * No database, no tenants, no business rules.
  */
 
-export { SEFIN_BASE_URL, TP_AMB, DEFAULT_AMBIENTE, resolveSefinBaseUrl } from './config.js';
+export { ADN_BASE_URL, SEFIN_BASE_URL, TP_AMB, DEFAULT_AMBIENTE, resolveAdnBaseUrl, resolveSefinBaseUrl } from './config.js';
 export type { Ambiente } from './config.js';
 
 export {
+  baixarDanfse,
+  consultarAliquota,
+  consultarBeneficio,
+  consultarConvenio,
+  consultarDps,
+  consultarEvento,
+  consultarEventosPorChaveAdn,
+  consultarHistoricoAliquotas,
   consultarNfse,
+  consultarRegimesEspeciais,
   createSefinLatencyTracker,
+  distribuirDfePorNsu,
   enviarEvento,
   extrairErros,
   getSefinRequestObserver,
@@ -19,6 +29,8 @@ export {
   setSefinRequestObserver,
 } from './sefinClient.js';
 export type {
+  DanfseResposta,
+  DistribuicaoNsuOptions,
   SefinErro,
   SefinLatencySeriesSnapshot,
   SefinLatencySnapshot,
@@ -27,6 +39,7 @@ export type {
   SefinOperation,
   SefinRequestMetric,
   SefinRequestObserver,
+  SefinRequestOptions,
   SefinResposta,
 } from './sefinClient.js';
 
@@ -54,17 +67,42 @@ export { DpsFiscalValidationError, validateDpsJsonRequest } from './fiscalValida
 export { EmitirNotaError, emitirNfse } from './emissaoNota.js';
 export type { EmitirNotaOptions, NotaInput, ResultadoEmissaoNota } from './emissaoNota.js';
 
+export {
+  buildCancelamentoFromJson,
+  buildCancelamentoPorSubstituicaoFromJson,
+  buildPedRegEventoId,
+  TP_EVENTO,
+} from './eventoJson.js';
+export type {
+  AutorEvento,
+  BuiltPedRegEvento,
+  CancelamentoNfseInput,
+  CancelamentoPorSubstituicaoInput,
+  TpEvento,
+} from './eventoJson.js';
+
+export {
+  cancelarNfse,
+  cancelarNfsePorSubstituicao,
+  registrarEvento,
+  RegistrarEventoError,
+} from './eventosNfse.js';
+export type { ResultadoEvento } from './eventosNfse.js';
+
 export { NfseClient } from './client.js';
 export type {
   CreateInvoiceInput,
+  DistributionResource,
+  EventResource,
   InvoiceResource,
+  MunicipalParametersResource,
   NfseCertificateInput,
   NfseClientDpsDefaults,
   NfseClientOptions,
   NfseEnvironment,
 } from './client.js';
 
-export { gzipBase64, gunzipBase64 } from './gzipB64.js';
+export { gzipBase64, gunzipBase64, gunzipBase64Flexivel } from './gzipB64.js';
 
 export { signDps, signEnveloped, verifyDps, withUtf8XmlDeclaration } from './signXml.js';
 

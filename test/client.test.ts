@@ -149,3 +149,34 @@ test('NfseClient reports missing JSON blocks when defaults do not provide them',
 
   assert.throws(() => client.invoices.buildDpsJson({}), /prestador/);
 });
+
+test('NfseClient exposes event, distribution, and municipal parameter resources', () => {
+  const client = new NfseClient({ certificate: pfx });
+
+  assert.equal(typeof client.invoices.getByDpsId, 'function');
+  assert.equal(typeof client.invoices.cancel, 'function');
+  assert.equal(typeof client.invoices.cancelBySubstitution, 'function');
+  assert.equal(typeof client.invoices.danfsePdf, 'function');
+  assert.equal(typeof client.events.get, 'function');
+  assert.equal(typeof client.events.listByChave, 'function');
+  assert.equal(typeof client.distribution.byNsu, 'function');
+  assert.equal(typeof client.municipalParameters.aliquota, 'function');
+  assert.equal(typeof client.municipalParameters.convenio, 'function');
+  assert.equal(typeof client.municipalParameters.historicoAliquotas, 'function');
+  assert.equal(typeof client.municipalParameters.regimesEspeciais, 'function');
+  assert.equal(typeof client.municipalParameters.beneficio, 'function');
+});
+
+test('NfseClient cancel validates the event input before touching the network', async () => {
+  const client = new NfseClient({ certificate: pfx });
+
+  await assert.rejects(
+    client.invoices.cancel({
+      chaveAcesso: '123',
+      autor: { CNPJ: '11222333000181' },
+      cMotivo: '1',
+      xMotivo: 'Nota emitida com valor incorreto',
+    }),
+    /50 digitos/,
+  );
+});

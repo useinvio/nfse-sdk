@@ -4,7 +4,15 @@ import { cpSync, readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
-import { buildDpsFromJson, type DpsJsonRequest } from '../index.js';
+import forge from 'node-forge';
+import {
+  buildCancelamentoFromJson,
+  buildCancelamentoPorSubstituicaoFromJson,
+  buildDpsFromJson,
+  loadPfxFromBuffer,
+  signEnveloped,
+  type DpsJsonRequest,
+} from '../index.js';
 
 const schemaDir = resolve('schemas/nfse/v1.01/Schemas/1.01');
 
@@ -19,7 +27,7 @@ function prepareXmllintSchemaDir(workDir: string): string {
   );
   writeFileSync(simpleTypesPath, simpleTypes);
 
-  return join(schemaCopyDir, 'DPS_v1.01.xsd');
+  return schemaCopyDir;
 }
 
 const request: DpsJsonRequest = {
@@ -74,10 +82,10 @@ const request: DpsJsonRequest = {
   },
 };
 
-function assertValidatesAgainstXsd(xml: string): void {
+function assertValidatesAgainstXsd(xml: string, rootSchema = 'DPS_v1.01.xsd'): void {
   const dir = mkdtempSync(join(tmpdir(), 'nfse-sdk-xsd-'));
-  const schemaPath = prepareXmllintSchemaDir(dir);
-  const xmlPath = join(dir, 'dps.xml');
+  const schemaPath = join(prepareXmllintSchemaDir(dir), rootSchema);
+  const xmlPath = join(dir, 'documento.xml');
   writeFileSync(xmlPath, xml);
 
   assert.doesNotThrow(() => {
@@ -176,6 +184,67 @@ test('generated DPS XML validates for the pTotTribSN branch (Simples Nacional)',
   });
   assertValidatesAgainstXsd(xml);
 });
+
+test('generated pedRegEvento (cancelamento e101101) validates against the official XSD', () => {
+  const { xml } = buildCancelamentoFromJson({
+    ambiente: 'restrita',
+    chaveAcesso: '1'.repeat(50),
+    autor: { CNPJ: '11222333000181' },
+    dhEvento: '2026-04-20T14:02:19-03:00',
+    cMotivo: '1',
+    xMotivo: 'Nota emitida com valor incorreto',
+  });
+  assertValidatesAgainstXsd(xml, 'pedRegEvento_v1.01.xsd');
+});
+
+test('generated pedRegEvento (cancelamento por substituicao e105102) validates against the official XSD', () => {
+  const { xml } = buildCancelamentoPorSubstituicaoFromJson({
+    ambiente: 'restrita',
+    chaveAcesso: '1'.repeat(50),
+    autor: { CPF: '39053344705' },
+    dhEvento: '2026-04-20T14:02:19-03:00',
+    cMotivo: '05',
+    xMotivo: 'Rejeicao registrada pelo tomador do servico',
+    chaveSubstituta: '2'.repeat(50),
+  });
+  assertValidatesAgainstXsd(xml, 'pedRegEvento_v1.01.xsd');
+});
+
+test('signed pedRegEvento keeps validating against the official XSD', () => {
+  const built = buildCancelamentoFromJson({
+    ambiente: 'restrita',
+    chaveAcesso: '1'.repeat(50),
+    autor: { CNPJ: '11222333000181' },
+    dhEvento: '2026-04-20T14:02:19-03:00',
+    cMotivo: '2',
+    xMotivo: 'Servico nao foi prestado ao tomador',
+  });
+  const pfx = loadPfxFromBuffer(createPfxFixture(), 'test-password');
+  const signedXml = signEnveloped(built.xml, built.id, 'infPedReg', pfx);
+  assertValidatesAgainstXsd(signedXml, 'pedRegEvento_v1.01.xsd');
+});
+
+function createPfxFixture(): Buffer {
+  const keys = forge.pki.rsa.generateKeyPair({ bits: 1024, e: 0x10001 });
+  const cert = forge.pki.createCertificate();
+  cert.publicKey = keys.publicKey;
+  cert.serialNumber = '01';
+
+  const now = new Date();
+  cert.validity.notBefore = new Date(now.getTime() - 60_000);
+  cert.validity.notAfter = new Date(now.getTime() + 86_400_000);
+
+  const attrs = [{ name: 'commonName', value: 'nfse-sdk test certificate' }];
+  cert.setSubject(attrs);
+  cert.setIssuer(attrs);
+  cert.setExtensions([{ name: 'basicConstraints', cA: false }]);
+  cert.sign(keys.privateKey, forge.md.sha256.create());
+
+  const p12Asn1 = forge.pkcs12.toPkcs12Asn1(keys.privateKey, [cert], 'test-password', {
+    algorithm: '3des',
+  });
+  return Buffer.from(forge.asn1.toDer(p12Asn1).getBytes(), 'binary');
+}
 
 test('generated DPS XML validates for a tomador with endNac address', () => {
   const { xml } = buildDpsFromJson({

@@ -5,6 +5,11 @@ export const SEFIN_BASE_URL: Record<Ambiente, string> = {
   restrita: 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional',
 };
 
+export const ADN_BASE_URL: Record<Ambiente, string> = {
+  producao: 'https://adn.nfse.gov.br',
+  restrita: 'https://adn.producaorestrita.nfse.gov.br',
+};
+
 export const TP_AMB: Record<Ambiente, '1' | '2'> = {
   producao: '1',
   restrita: '2',
@@ -14,4 +19,8 @@ export const DEFAULT_AMBIENTE: Ambiente = 'restrita';
 
 export function resolveSefinBaseUrl(ambiente: Ambiente = DEFAULT_AMBIENTE): string {
   return SEFIN_BASE_URL[ambiente];
+}
+
+export function resolveAdnBaseUrl(ambiente: Ambiente = DEFAULT_AMBIENTE): string {
+  return ADN_BASE_URL[ambiente];
 }

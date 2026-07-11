@@ -1,12 +1,23 @@
 import https from 'node:https';
 import { performance } from 'node:perf_hooks';
-import { resolveSefinBaseUrl } from './config.js';
+import { resolveAdnBaseUrl, resolveSefinBaseUrl } from './config.js';
 import type { PfxMaterial } from './loadPfx.js';
 import type { Ambiente } from './config.js';
 
 /** Evita que uma conexao travada com o SEFIN prenda um worker indefinidamente. */
 const SEFIN_REQUEST_TIMEOUT_MS = 60_000;
 export const SEFIN_LATENCY_METRICS_ENV = 'NFSE_SEFIN_LATENCY_METRICS';
+
+export interface SefinRequestOptions {
+  /** Timeout por requisicao em ms. Default: 60000. */
+  timeoutMs?: number;
+  /**
+   * Numero de novas tentativas com backoff exponencial para falhas transitorias
+   * (erro de rede ou HTTP 502/503/504). Aplicado apenas a operacoes GET,
+   * que sao idempotentes. Default: 0.
+   */
+  retries?: number;
+}
 
 export interface SefinErro {
   Codigo: string;
@@ -20,7 +31,16 @@ export interface SefinResposta {
   body: any;
 }
 
-export type SefinOperation = 'transmitir_dps' | 'consultar_nfse' | 'enviar_evento';
+export type SefinOperation =
+  | 'transmitir_dps'
+  | 'consultar_nfse'
+  | 'consultar_dps'
+  | 'enviar_evento'
+  | 'consultar_evento'
+  | 'baixar_danfse'
+  | 'adn_distribuicao_nsu'
+  | 'adn_eventos_chave'
+  | 'adn_parametros_municipais';
 
 export interface SefinRequestMetric {
   operation: SefinOperation;
@@ -83,6 +103,8 @@ interface RequestOpts {
   /** Caminho relativo à base do SefinNacional, ex.: "/nfse" ou "/nfse/<chave>" */
   path: string;
   jsonBody?: unknown;
+  /** Valor do header Accept. Default: application/json. */
+  accept?: string;
 }
 
 interface RequestMetricOpts {
@@ -209,12 +231,14 @@ function sefinRequest(
   pfx: PfxMaterial,
   metricOpts: RequestMetricOpts,
   baseOverride?: string,
+  requestOptions?: SefinRequestOptions,
 ): Promise<SefinRespostaRaw> {
   const url = new URL(`${baseOverride ?? resolveSefinBaseUrl()}${opts.path}`);
   const payload = opts.jsonBody != null ? JSON.stringify(opts.jsonBody) : undefined;
+  const timeoutMs = requestOptions?.timeoutMs ?? SEFIN_REQUEST_TIMEOUT_MS;
 
   const headers: Record<string, string | number> = {
-    Accept: 'application/json',
+    Accept: opts.accept ?? 'application/json',
   };
   if (payload != null) {
     headers['Content-Type'] = 'application/json';
@@ -230,7 +254,7 @@ function sefinRequest(
     key: pfx.privateKeyPem,
     cert: pfx.certPem,
     rejectUnauthorized: true,
-    timeout: SEFIN_REQUEST_TIMEOUT_MS,
+    timeout: timeoutMs,
   };
 
   return new Promise((resolve, reject) => {
@@ -278,11 +302,52 @@ function sefinRequest(
       reject(error);
     });
     req.on('timeout', () => {
-      req.destroy(new Error(`SEFIN request timed out after ${SEFIN_REQUEST_TIMEOUT_MS}ms`));
+      req.destroy(new Error(`SEFIN request timed out after ${timeoutMs}ms`));
     });
     if (payload != null) req.write(payload);
     req.end();
   });
+}
+
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
+
+function retryDelayMs(attempt: number): number {
+  return Math.min(4_000, 500 * 2 ** attempt);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Executa a requisicao com novas tentativas para falhas transitorias.
+ * Apenas GETs sao repetidos: POSTs de emissao/evento nao sao idempotentes.
+ */
+async function sefinRequestWithRetry(
+  opts: RequestOpts,
+  pfx: PfxMaterial,
+  metricOpts: RequestMetricOpts,
+  baseOverride?: string,
+  requestOptions?: SefinRequestOptions,
+): Promise<SefinRespostaRaw> {
+  const retries = opts.method === 'GET' ? Math.max(0, Math.floor(requestOptions?.retries ?? 0)) : 0;
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const res = await sefinRequest(opts, pfx, metricOpts, baseOverride, requestOptions);
+      if (attempt < retries && RETRYABLE_STATUS.has(res.status)) {
+        await sleep(retryDelayMs(attempt));
+        continue;
+      }
+      return res;
+    } catch (error) {
+      if (attempt < retries) {
+        await sleep(retryDelayMs(attempt));
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 /** Parseia o corpo como JSON; mantém texto cru se não for JSON (ex.: 403 HTML). */
@@ -343,24 +408,52 @@ export async function transmitirDpsCompactada(
   dpsXmlGZipB64: string,
   pfx: PfxMaterial,
   ambiente?: Ambiente,
+  options?: SefinRequestOptions,
 ): Promise<SefinResposta> {
   const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
-  return parseJson(await sefinRequest(
+  return parseJson(await sefinRequestWithRetry(
     { method: 'POST', path: '/nfse', jsonBody: { dpsXmlGZipB64 } },
     pfx,
     { operation: 'transmitir_dps', ambiente, pathTemplate: '/nfse' },
     base,
+    options,
   ));
 }
 
 /** SefinNacional · GET /nfse/{chave} — consulta a NFS-e pela chave de acesso (50 dígitos). */
-export async function consultarNfse(chave: string, pfx: PfxMaterial, ambiente?: Ambiente): Promise<SefinResposta> {
+export async function consultarNfse(
+  chave: string,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
   const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
-  return parseJson(await sefinRequest(
+  return parseJson(await sefinRequestWithRetry(
     { method: 'GET', path: `/nfse/${chave}` },
     pfx,
     { operation: 'consultar_nfse', ambiente, pathTemplate: '/nfse/{chave}' },
     base,
+    options,
+  ));
+}
+
+/**
+ * SefinNacional · GET /dps/{id} — consulta a NFS-e pelo Id da DPS (45 caracteres).
+ * Util para idempotencia: recuperar a chave de acesso quando a emissao sofreu timeout.
+ */
+export async function consultarDps(
+  dpsId: string,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
+  return parseJson(await sefinRequestWithRetry(
+    { method: 'GET', path: `/dps/${dpsId}` },
+    pfx,
+    { operation: 'consultar_dps', ambiente, pathTemplate: '/dps/{id}' },
+    base,
+    options,
   ));
 }
 
@@ -370,10 +463,11 @@ export async function enviarEvento(
   pfx: PfxMaterial,
   chaveAcesso: string,
   ambiente?: Ambiente,
+  options?: SefinRequestOptions,
 ): Promise<SefinResposta> {
   const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
   return parseJson(
-    await sefinRequest(
+    await sefinRequestWithRetry(
       {
         method: 'POST',
         path: `/nfse/${chaveAcesso}/eventos`,
@@ -382,6 +476,214 @@ export async function enviarEvento(
       pfx,
       { operation: 'enviar_evento', ambiente, pathTemplate: '/nfse/{chave}/eventos' },
       base,
+      options,
     ),
+  );
+}
+
+/**
+ * SefinNacional · GET /nfse/{chave}/eventos/{tpEvento}[/{nSeqEvento}] — consulta
+ * eventos registrados para a NFS-e. Sem nSeqEvento retorna todos do tipo.
+ */
+export async function consultarEvento(
+  chaveAcesso: string,
+  tpEvento: string,
+  nSeqEvento: string | number | undefined,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
+  const seqPath = nSeqEvento != null ? `/${nSeqEvento}` : '';
+  return parseJson(await sefinRequestWithRetry(
+    { method: 'GET', path: `/nfse/${chaveAcesso}/eventos/${tpEvento}${seqPath}` },
+    pfx,
+    {
+      operation: 'consultar_evento',
+      ambiente,
+      pathTemplate: nSeqEvento != null ? '/nfse/{chave}/eventos/{tpEvento}/{nSeqEvento}' : '/nfse/{chave}/eventos/{tpEvento}',
+    },
+    base,
+    options,
+  ));
+}
+
+export interface DanfseResposta {
+  status: number;
+  contentType: string;
+  /** Presente quando a resposta e um PDF valido. */
+  pdf?: Buffer;
+  /** Corpo parseado quando a resposta nao e um PDF (ex.: JSON de erro). */
+  body?: any;
+}
+
+/** SefinNacional · GET /danfse/{chave} — baixa o PDF do DANFSe da NFS-e. */
+export async function baixarDanfse(
+  chaveAcesso: string,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<DanfseResposta> {
+  const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
+  const raw = await sefinRequestWithRetry(
+    { method: 'GET', path: `/danfse/${chaveAcesso}`, accept: 'application/pdf' },
+    pfx,
+    { operation: 'baixar_danfse', ambiente, pathTemplate: '/danfse/{chave}' },
+    base,
+    options,
+  );
+
+  const isPdf = raw.contentType.includes('pdf') || raw.buffer.subarray(0, 5).toString('latin1') === '%PDF-';
+  if (raw.status >= 200 && raw.status < 300 && isPdf) {
+    return { status: raw.status, contentType: raw.contentType, pdf: raw.buffer };
+  }
+  const { body } = parseJson(raw);
+  return { status: raw.status, contentType: raw.contentType, body };
+}
+
+export interface DistribuicaoNsuOptions extends SefinRequestOptions {
+  /** CNPJ/CPF consultante, quando diferente do titular do certificado. */
+  cnpjConsulta?: string;
+  /** Quando true, retorna um lote de documentos a partir do NSU informado. */
+  lote?: boolean;
+}
+
+/** ADN · GET /contribuintes/DFe/{nsu} — distribuicao de documentos fiscais por NSU. */
+export async function distribuirDfePorNsu(
+  nsu: string | number,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: DistribuicaoNsuOptions,
+): Promise<SefinResposta> {
+  const query = new URLSearchParams();
+  if (options?.cnpjConsulta) query.set('cnpjConsulta', options.cnpjConsulta);
+  if (options?.lote !== undefined) query.set('lote', String(options.lote));
+  const queryString = query.size > 0 ? `?${query.toString()}` : '';
+
+  return parseJson(await sefinRequestWithRetry(
+    { method: 'GET', path: `/contribuintes/DFe/${nsu}${queryString}` },
+    pfx,
+    { operation: 'adn_distribuicao_nsu', ambiente, pathTemplate: '/contribuintes/DFe/{nsu}' },
+    resolveAdnBaseUrl(ambiente),
+    options,
+  ));
+}
+
+/** ADN · GET /contribuintes/NFSe/{chave}/Eventos — todos os eventos vinculados a chave. */
+export async function consultarEventosPorChaveAdn(
+  chaveAcesso: string,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return parseJson(await sefinRequestWithRetry(
+    { method: 'GET', path: `/contribuintes/NFSe/${chaveAcesso}/Eventos` },
+    pfx,
+    { operation: 'adn_eventos_chave', ambiente, pathTemplate: '/contribuintes/NFSe/{chave}/Eventos' },
+    resolveAdnBaseUrl(ambiente),
+    options,
+  ));
+}
+
+async function consultarParametrosMunicipais(
+  path: string,
+  pathTemplate: string,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return parseJson(await sefinRequestWithRetry(
+    { method: 'GET', path },
+    pfx,
+    { operation: 'adn_parametros_municipais', ambiente, pathTemplate },
+    resolveAdnBaseUrl(ambiente),
+    options,
+  ));
+}
+
+/** ADN · GET /parametrizacao/{codMun}/convenio — situacao do convenio do municipio. */
+export function consultarConvenio(
+  codigoMunicipio: string,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return consultarParametrosMunicipais(
+    `/parametrizacao/${codigoMunicipio}/convenio`,
+    '/parametrizacao/{codMun}/convenio',
+    pfx,
+    ambiente,
+    options,
+  );
+}
+
+/** ADN · GET /parametrizacao/{codMun}/{codServico}/{competencia}/aliquota — aliquota do servico. */
+export function consultarAliquota(
+  codigoMunicipio: string,
+  codigoServico: string,
+  competencia: string,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return consultarParametrosMunicipais(
+    `/parametrizacao/${codigoMunicipio}/${codigoServico}/${competencia}/aliquota`,
+    '/parametrizacao/{codMun}/{codServico}/{competencia}/aliquota',
+    pfx,
+    ambiente,
+    options,
+  );
+}
+
+/** ADN · GET /parametrizacao/{codMun}/{codServico}/historicoaliquotas — historico de aliquotas. */
+export function consultarHistoricoAliquotas(
+  codigoMunicipio: string,
+  codigoServico: string,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return consultarParametrosMunicipais(
+    `/parametrizacao/${codigoMunicipio}/${codigoServico}/historicoaliquotas`,
+    '/parametrizacao/{codMun}/{codServico}/historicoaliquotas',
+    pfx,
+    ambiente,
+    options,
+  );
+}
+
+/** ADN · GET /parametrizacao/{codMun}/{codServico}/{competencia}/regimes_especiais — regimes especiais. */
+export function consultarRegimesEspeciais(
+  codigoMunicipio: string,
+  codigoServico: string,
+  competencia: string,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return consultarParametrosMunicipais(
+    `/parametrizacao/${codigoMunicipio}/${codigoServico}/${competencia}/regimes_especiais`,
+    '/parametrizacao/{codMun}/{codServico}/{competencia}/regimes_especiais',
+    pfx,
+    ambiente,
+    options,
+  );
+}
+
+/** ADN · GET /parametrizacao/{codMun}/{numeroBeneficio}/{competencia}/beneficio — beneficio municipal. */
+export function consultarBeneficio(
+  codigoMunicipio: string,
+  numeroBeneficio: string,
+  competencia: string,
+  pfx: PfxMaterial,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return consultarParametrosMunicipais(
+    `/parametrizacao/${codigoMunicipio}/${numeroBeneficio}/${competencia}/beneficio`,
+    '/parametrizacao/{codMun}/{numeroBeneficio}/{competencia}/beneficio',
+    pfx,
+    ambiente,
+    options,
   );
 }

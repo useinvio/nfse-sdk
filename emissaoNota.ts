@@ -6,11 +6,11 @@ import { signDps } from './signXml.js';
 import type { Ambiente } from './config.js';
 import type { DpsJsonRequest } from './dpsJson.js';
 import type { PfxMaterial } from './loadPfx.js';
-import type { SefinErro } from './sefinClient.js';
+import type { SefinErro, SefinRequestOptions } from './sefinClient.js';
 
 export type NotaInput = DpsJsonRequest | string;
 
-export interface EmitirNotaOptions {
+export interface EmitirNotaOptions extends SefinRequestOptions {
   ambiente?: Ambiente;
   /** Obrigatorio quando o input for XML sem Id em <infDPS>. */
   dpsId?: string;
@@ -87,7 +87,10 @@ export async function emitirNfse(
   const nota = prepararNota(input, options);
   const signedXml = signDps(nota.xml, nota.dpsId, pfx);
   const dpsXmlGZipB64 = gzipBase64(signedXml);
-  const { status, body } = await transmitirDpsCompactada(dpsXmlGZipB64, pfx, nota.ambiente);
+  const { status, body } = await transmitirDpsCompactada(dpsXmlGZipB64, pfx, nota.ambiente, {
+    timeoutMs: options.timeoutMs,
+    retries: options.retries,
+  });
   const nfseB64 = body?.nfseXmlGZipB64 ?? body?.NfseXmlGZipB64;
 
   if (status >= 200 && status < 300 && nfseB64) {
