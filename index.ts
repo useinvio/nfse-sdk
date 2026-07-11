@@ -1,7 +1,8 @@
 /**
  * NFS-e Nacional SDK.
  *
- * Handles the protocol layer only: mTLS, signing, gzip/base64, send, consult, events.
+ * Handles the protocol layer only: mTLS, signing, gzip/base64, send, consult,
+ * events, DANFSe, ADN distribution, and municipal parameter queries.
  * No database, no tenants, no business rules.
  */
 

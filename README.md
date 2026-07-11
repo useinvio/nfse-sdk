@@ -37,9 +37,14 @@ O SDK cuida da camada protocolar: certificado A1, montagem de DPS, validações 
 - [Inspecionar o XML antes de enviar](#inspecionar-o-xml-antes-de-enviar)
 - [Tratar rejeições da SEFIN](#tratar-rejeições-da-sefin)
 - [Consultar uma NFS-e emitida](#consultar-uma-nfs-e-emitida)
-- [Enviar evento](#enviar-evento-ex-cancelamento)
+- [Cancelar uma NFS-e](#cancelar-uma-nfs-e)
+- [Consultar eventos](#consultar-eventos)
+- [Baixar o DANFSe (PDF)](#baixar-o-danfse-pdf)
+- [Distribuição de documentos (ADN)](#distribuição-de-documentos-adn)
+- [Parâmetros municipais](#parâmetros-municipais)
 - [Série e número da DPS](#série-e-número-da-dps)
 - [Ambientes](#ambientes)
+- [Timeout e retry](#timeout-e-retry)
 - [Referência da API](#referência-da-api)
 - [Desenvolvimento](#desenvolvimento)
 - [Publicação no npm](#publicação-no-npm)
@@ -138,6 +143,9 @@ try {
 | Outro sistema já gera o XML da DPS | `emitirNfse(xmlString, pfx)` |
 | Você monta os dados e quer que a SDK construa o XML | `emitirNfse(notaJson, pfx)` |
 | Precisa inspecionar ou salvar o XML antes de enviar | `buildDpsFromJson(nota)` |
+| Precisa cancelar uma NFS-e emitida | `cancelarNfse(...)` ou `client.invoices.cancel(...)` |
+| Precisa do PDF da nota (DANFSe) | `baixarDanfse(...)` ou `client.invoices.danfsePdf(...)` |
+| Acompanha notas/eventos como tomador (distribuição ADN) | `distribuirDfePorNsu(...)` / `client.distribution.byNsu(...)` |
 | Fluxo customizado (assinar, compactar ou enviar separadamente) | funções de baixo nível |
 
 ---
@@ -380,9 +388,56 @@ if (resposta.status === 200) {
 }
 ```
 
+Quando a emissão sofre timeout e você não sabe se a nota foi gerada, consulte
+pelo Id da DPS (45 caracteres) para recuperar a chave de acesso sem risco de
+duplicidade:
+
+```ts
+import { consultarDps } from '@useinvio/nfse-sdk';
+
+const resposta = await consultarDps(dpsId, pfx, 'restrita');
+// via cliente: await client.invoices.getByDpsId(dpsId)
+```
+
 ---
 
-## Enviar evento (ex.: cancelamento)
+## Cancelar uma NFS-e
+
+O SDK monta, assina e envia o pedido de registro do evento `e101101`
+(Cancelamento de NFS-e). Informe o autor (CNPJ ou CPF), o código do motivo e
+uma justificativa de 15 a 255 caracteres:
+
+```ts
+import { cancelarNfse, RegistrarEventoError } from '@useinvio/nfse-sdk';
+
+try {
+  const resultado = await cancelarNfse(
+    {
+      ambiente: 'restrita',
+      chaveAcesso, // 50 dígitos
+      autor: { CNPJ: '12345678000195' },
+      cMotivo: '1', // 1 = Erro na Emissão; 2 = Serviço não Prestado; 9 = Outros
+      xMotivo: 'Nota emitida com valor incorreto',
+    },
+    pfx,
+  );
+  console.log(resultado.eventoXml);
+} catch (error) {
+  if (error instanceof RegistrarEventoError) {
+    console.error(error.status, error.erros);
+  }
+}
+```
+
+Para cancelamento por substituição (`e105102`), use
+`cancelarNfsePorSubstituicao(...)` informando também `chaveSubstituta` — a
+chave da NFS-e que substitui a cancelada.
+
+Via cliente: `client.invoices.cancel(...)` e
+`client.invoices.cancelBySubstitution(...)`.
+
+Para outros tipos de evento, o caminho de baixo nível continua disponível —
+assine e envie um `pedRegEvento` próprio:
 
 ```ts
 import { enviarEvento, gzipBase64, signEnveloped } from '@useinvio/nfse-sdk';
@@ -392,6 +447,97 @@ const pedRegXmlGZipB64 = gzipBase64(signedEventXml);
 
 const resposta = await enviarEvento(pedRegXmlGZipB64, pfx, chaveAcesso, 'restrita');
 ```
+
+---
+
+## Consultar eventos
+
+Consulta os eventos registrados para uma NFS-e na SEFIN, por tipo e,
+opcionalmente, por número sequencial:
+
+```ts
+import { consultarEvento, TP_EVENTO } from '@useinvio/nfse-sdk';
+
+// todos os eventos de cancelamento da nota
+const todos = await consultarEvento(chaveAcesso, TP_EVENTO.cancelamento, undefined, pfx, 'restrita');
+
+// um evento específico
+const um = await consultarEvento(chaveAcesso, TP_EVENTO.cancelamento, 1, pfx, 'restrita');
+```
+
+Via cliente: `client.events.get(chaveAcesso, TP_EVENTO.cancelamento, 1)`.
+
+O XML retornado em `arquivoXml` pode vir em Base64 simples ou duplo; use
+`gunzipBase64Flexivel(...)` para decodificar sem se preocupar com o formato.
+
+---
+
+## Baixar o DANFSe (PDF)
+
+```ts
+import { baixarDanfse } from '@useinvio/nfse-sdk';
+import { writeFile } from 'node:fs/promises';
+
+const danfse = await baixarDanfse(chaveAcesso, pfx, 'restrita');
+
+if (danfse.pdf) {
+  await writeFile('danfse.pdf', danfse.pdf);
+} else {
+  console.error('Falha ao baixar DANFSe:', danfse.status, danfse.body);
+}
+```
+
+Via cliente: `client.invoices.danfsePdf(chaveAcesso)`.
+
+---
+
+## Distribuição de documentos (ADN)
+
+O Ambiente de Dados Nacional (ADN) distribui, por NSU, os documentos fiscais
+vinculados ao CNPJ do certificado — útil para tomadores acompanharem notas
+emitidas contra si e para sincronizar eventos:
+
+```ts
+import { distribuirDfePorNsu, consultarEventosPorChaveAdn, gunzipBase64Flexivel } from '@useinvio/nfse-sdk';
+
+// documentos a partir do NSU informado (lote)
+const lote = await distribuirDfePorNsu(0, pfx, 'restrita', { lote: true });
+for (const doc of lote.body?.LoteDFe ?? []) {
+  const xml = gunzipBase64Flexivel(doc.ArquivoXml);
+}
+
+// todos os eventos de uma chave no ADN
+const eventos = await consultarEventosPorChaveAdn(chaveAcesso, pfx, 'restrita');
+```
+
+Via cliente: `client.distribution.byNsu(0, { lote: true })` e
+`client.events.listByChave(chaveAcesso)`.
+
+---
+
+## Parâmetros municipais
+
+Consultas de parametrização no ADN, úteis para validar dados antes de emitir
+(alíquota vigente, convênio do município, regimes especiais e benefícios):
+
+```ts
+import {
+  consultarAliquota,
+  consultarConvenio,
+  consultarHistoricoAliquotas,
+  consultarRegimesEspeciais,
+  consultarBeneficio,
+} from '@useinvio/nfse-sdk';
+
+const convenio = await consultarConvenio('4106902', pfx, 'restrita');
+const aliquota = await consultarAliquota('4106902', '010201', '2026-07-01', pfx, 'restrita');
+const historico = await consultarHistoricoAliquotas('4106902', '010201', pfx, 'restrita');
+const regimes = await consultarRegimesEspeciais('4106902', '010201', '2026-07-01', pfx, 'restrita');
+const beneficio = await consultarBeneficio('4106902', 'NUMERO_BENEFICIO', '2026-07-01', pfx, 'restrita');
+```
+
+Via cliente: `client.municipalParameters.aliquota(...)`, `.convenio(...)`,
+`.historicoAliquotas(...)`, `.regimesEspeciais(...)` e `.beneficio(...)`.
 
 ---
 
@@ -426,16 +572,41 @@ serie 1601, nDPS 3
 
 ## Ambientes
 
-| Chave | URL |
-|---|---|
-| `restrita` | `https://sefin.producaorestrita.nfse.gov.br/SefinNacional` |
-| `producao` | `https://sefin.nfse.gov.br/SefinNacional` |
+| Chave | SEFIN | ADN |
+|---|---|---|
+| `restrita` | `https://sefin.producaorestrita.nfse.gov.br/SefinNacional` | `https://adn.producaorestrita.nfse.gov.br` |
+| `producao` | `https://sefin.nfse.gov.br/SefinNacional` | `https://adn.nfse.gov.br` |
 
 ```ts
-import { resolveSefinBaseUrl } from '@useinvio/nfse-sdk';
+import { resolveSefinBaseUrl, resolveAdnBaseUrl } from '@useinvio/nfse-sdk';
 
-const baseUrl = resolveSefinBaseUrl('restrita');
+const sefinUrl = resolveSefinBaseUrl('restrita');
+const adnUrl = resolveAdnBaseUrl('restrita');
 ```
+
+---
+
+## Timeout e retry
+
+Todas as funções de transporte aceitam `SefinRequestOptions` como último
+parâmetro, e o `NfseClient` aceita o mesmo objeto em `request`:
+
+```ts
+const client = new NfseClient({
+  certificate,
+  request: {
+    timeoutMs: 30_000, // default: 60000
+    retries: 2,        // default: 0
+  },
+});
+
+// ou por chamada:
+const resposta = await consultarNfse(chaveAcesso, pfx, 'restrita', { timeoutMs: 10_000, retries: 3 });
+```
+
+`retries` usa backoff exponencial (0,5s, 1s, 2s, máx. 4s) e se aplica apenas a
+consultas GET, que são idempotentes — emissões e eventos (POST) nunca são
+repetidos automaticamente para não gerar duplicidade.
 
 ---
 
@@ -453,11 +624,21 @@ Leia o guia completo em [docs/METRICS.md](./docs/METRICS.md).
 
 | Função | Descrição |
 |---|---|
-| `new NfseClient(options)` | Cria cliente com ambiente, certificado e defaults no mesmo formato do JSON declarativo. |
+| `new NfseClient(options)` | Cria cliente com ambiente, certificado e defaults no mesmo formato do JSON declarativo. Recursos: `invoices`, `events`, `distribution`, `municipalParameters`. |
 | `emitirNfse(input, pfx, options?)` | Emite uma NFS-e a partir de XML ou JSON. Retorna `ResultadoEmissaoNota`. |
-| `consultarNfse(chaveAcesso, pfx, ambiente?)` | Consulta uma NFS-e pela chave de acesso. |
-| `enviarEvento(xmlGzipB64, pfx, chaveAcesso, ambiente?)` | Envia evento fiscal (cancelamento, etc.). |
+| `cancelarNfse(input, pfx, options?)` | Cancela uma NFS-e (evento e101101): monta, assina e envia o pedido. |
+| `cancelarNfsePorSubstituicao(input, pfx, options?)` | Cancela por substituição (evento e105102). |
+| `consultarNfse(chaveAcesso, pfx, ambiente?, options?)` | Consulta uma NFS-e pela chave de acesso. |
+| `consultarDps(dpsId, pfx, ambiente?, options?)` | Consulta uma NFS-e pelo Id da DPS (idempotência pós-timeout). |
+| `consultarEvento(chave, tpEvento, nSeq?, pfx, ambiente?, options?)` | Consulta eventos registrados na SEFIN. |
+| `baixarDanfse(chaveAcesso, pfx, ambiente?, options?)` | Baixa o PDF do DANFSe. |
+| `distribuirDfePorNsu(nsu, pfx, ambiente?, options?)` | Distribuição de documentos por NSU no ADN. |
+| `consultarEventosPorChaveAdn(chave, pfx, ambiente?, options?)` | Todos os eventos de uma chave no ADN. |
+| `consultarAliquota / consultarConvenio / consultarHistoricoAliquotas / consultarRegimesEspeciais / consultarBeneficio` | Consultas de parâmetros municipais no ADN. |
+| `enviarEvento(xmlGzipB64, pfx, chaveAcesso, ambiente?, options?)` | Envia evento fiscal já assinado/compactado (baixo nível). |
 | `buildDpsFromJson(nota)` | Monta o XML da DPS sem assinar nem enviar. |
+| `buildCancelamentoFromJson(input)` / `buildCancelamentoPorSubstituicaoFromJson(input)` | Montam o XML do pedRegEvento sem assinar nem enviar. |
+| `registrarEvento(built, pfx, options?)` | Assina e envia um `BuiltPedRegEvento`. |
 | `setSefinRequestObserver(observer)` | Registra um hook para observar latência/status das chamadas à SEFIN. |
 | `createSefinLatencyTracker(options?)` | Agrega amostras recentes e pode calcular percentis quando `includePercentiles` estiver habilitado. |
 
@@ -475,17 +656,23 @@ Leia o guia completo em [docs/METRICS.md](./docs/METRICS.md).
 | `signDps(xml, dpsId, pfx)` | Assina XML de DPS com XMLDSIG. |
 | `signEnveloped(xml, id, ref, pfx)` | Assina XML genérico (eventos). |
 | `verifyDps(xml)` | Verifica assinatura de uma DPS. |
+| `buildPedRegEventoId(chave, tpEvento)` | Monta o Id `PRE` + chave(50) + tpEvento(6) do pedRegEvento. |
 | `gzipBase64(xml)` | Compacta XML em GZip e codifica em Base64. |
 | `gunzipBase64(b64)` | Descompacta resposta GZip/Base64. |
+| `gunzipBase64Flexivel(b64)` | Descompacta payloads em Base64 simples ou duplo (eventos/ADN). |
 | `extrairErros(body)` | Normaliza erros oficiais de uma resposta da SEFIN. |
-| `resolveSefinBaseUrl(ambiente)` | Retorna a URL base do ambiente. |
+| `resolveSefinBaseUrl(ambiente)` | Retorna a URL base da SEFIN do ambiente. |
+| `resolveAdnBaseUrl(ambiente)` | Retorna a URL base do ADN do ambiente. |
 
 ### Tipos exportados
 
 ```ts
 import type {
   Ambiente,
+  CancelamentoNfseInput,
+  CancelamentoPorSubstituicaoInput,
   CreateInvoiceInput,
+  DanfseResposta,
   DpsJsonInput,
   DpsJsonRequest,
   EmitirNotaOptions,
@@ -495,7 +682,9 @@ import type {
   PfxMaterial,
   PrestadorProfile,
   ResultadoEmissaoNota,
+  ResultadoEvento,
   SefinErro,
+  SefinRequestOptions,
   SefinResposta,
   ServicoProfile,
 } from '@useinvio/nfse-sdk';
@@ -504,7 +693,7 @@ import type {
 ### Constantes
 
 ```ts
-import { SEFIN_BASE_URL, TP_AMB, DEFAULT_AMBIENTE } from '@useinvio/nfse-sdk';
+import { SEFIN_BASE_URL, ADN_BASE_URL, TP_AMB, TP_EVENTO, DEFAULT_AMBIENTE } from '@useinvio/nfse-sdk';
 ```
 
 ---

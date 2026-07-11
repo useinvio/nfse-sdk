@@ -16,26 +16,32 @@ It is not a fiscal decision engine. Do not infer tax codes, accounting rules, te
 
 ## Public Entry Points
 
-- `NfseClient`: resource-oriented client. Configure certificate, environment, and defaults once, then use `client.invoices.create(...)`, `client.invoices.buildDpsJson(...)`, and `client.invoices.get(...)`.
+- `NfseClient`: resource-oriented client. Configure certificate, environment, defaults, and `request` (timeout/retries) once, then use `client.invoices.*` (`create`, `buildDpsJson`, `get`, `getByDpsId`, `cancel`, `cancelBySubstitution`, `danfsePdf`), `client.events.*` (`get`, `listByChave`), `client.distribution.byNsu(...)`, and `client.municipalParameters.*`.
 - `emitirNfse(input, pfx, options?)`: issue an invoice from a DPS XML string or `DpsJsonRequest`.
+- `cancelarNfse(input, pfx, options?)` and `cancelarNfsePorSubstituicao(...)`: build, sign, and send the e101101/e105102 cancellation events; throw `RegistrarEventoError` on rejection.
 - `buildDpsFromJson(input)`: build unsigned DPS XML from declarative JSON.
+- `buildCancelamentoFromJson(...)`, `buildCancelamentoPorSubstituicaoFromJson(...)`, `buildPedRegEventoId(...)`: build unsigned pedRegEvento XML/Id; `registrarEvento(built, pfx)` signs and sends it.
 - `buildDpsId(prestador, nDPS, serie?)`: derive the 45-character DPS Id.
 - `loadPfx(...)` and `loadPfxFromBuffer(...)`: extract key/certificate material from an A1/PFX certificate.
-- `consultarNfse(...)`, `enviarEvento(...)`, `extrairErros(...)`: lower-level SEFIN helpers.
+- `consultarNfse(...)`, `consultarDps(...)`, `consultarEvento(...)`, `baixarDanfse(...)`, `enviarEvento(...)`, `extrairErros(...)`: SEFIN helpers.
+- `distribuirDfePorNsu(...)`, `consultarEventosPorChaveAdn(...)`, `consultarAliquota/Convenio/HistoricoAliquotas/RegimesEspeciais/Beneficio(...)`: ADN distribution and municipal parameter queries.
 - `setSefinRequestObserver(...)` and `createSefinLatencyTracker(...)`: observe SEFIN round-trip latency when `NFSE_SEFIN_LATENCY_METRICS` is enabled; percentiles require `includePercentiles: true`.
-- `gzipBase64(...)`, `gunzipBase64(...)`, `signDps(...)`, `verifyDps(...)`: protocol utilities for custom flows.
+- `gzipBase64(...)`, `gunzipBase64(...)`, `gunzipBase64Flexivel(...)`, `signDps(...)`, `signEnveloped(...)`, `verifyDps(...)`: protocol utilities for custom flows.
 
 ## File Map
 
 - `client.ts`: friendly client API and default merging.
 - `emissaoNota.ts`: central issue flow: prepare input, sign DPS, gzip/base64, transmit, unzip authorized XML, normalize errors.
-- `dpsJson.ts`: JSON-to-DPS XML builder, XML escaping, DPS Id generation, value formatting, and XML block assembly.
+- `eventosNfse.ts`: event flow: sign pedRegEvento, gzip/base64, send, normalize rejections (`RegistrarEventoError`).
+- `dpsJson.ts`: JSON-to-DPS XML builder, DPS Id generation, value formatting, and XML block assembly.
+- `eventoJson.ts`: JSON-to-pedRegEvento XML builder for e101101/e105102 and the `PRE` Id rule.
+- `xmlBuild.ts`: shared low-level XML helpers (escaping, elements, padding, timestamps).
 - `fiscalValidation.ts`: structural and layout-oriented validation for the JSON input. This intentionally rejects unsupported or ambiguous fiscal shapes.
-- `sefinClient.ts`: HTTPS mTLS requests to SEFIN, latency observation, response parsing, error normalization, invoice query, issue transport, and event transport.
-- `config.ts`: SEFIN base URLs, environment names, and `tpAmb` mapping.
+- `sefinClient.ts`: HTTPS mTLS requests to SEFIN and ADN, latency observation, response parsing, error normalization, timeout/retry options, and every endpoint wrapper (issue, queries, events, DANFSe, distribution, municipal parameters).
+- `config.ts`: SEFIN and ADN base URLs, environment names, and `tpAmb` mapping.
 - `loadPfx.ts`: PFX/A1 certificate decoding with `node-forge`.
 - `signXml.ts`: XMLDSIG signing and verification helpers.
-- `gzipB64.ts`: GZip/Base64 helpers.
+- `gzipB64.ts`: GZip/Base64 helpers, including the single/double Base64 decoder.
 
 ## Core Data Shape
 
@@ -58,6 +64,8 @@ Keep values as strings when they represent fiscal codes, identifiers, decimals, 
 - `emissao.totTrib` follows an `xs:choice`: provide exactly one branch among value totals, percentage totals, `indTotTrib`, or `pTotTribSN`.
 - `buildDpsId` must return a 45-character Id beginning with `DPS`.
 - `emitirNfse` signs the DPS before transport and throws `EmitirNotaError` when SEFIN rejects or no authorized XML is returned.
+- Event Ids follow `TSIdPedRegEvt`: `PRE` + access key (50) + event type (6) = `PRE[0-9]{56}`; there is no sequence number in the Id.
+- Retries (`SefinRequestOptions.retries`) apply only to GET calls; POSTs (issue/event) are never retried automatically.
 - `sefinClient.ts` uses PEM key/cert material for mTLS, not the raw PFX in the Node TLS handshake.
 - SEFIN latency metrics are off by default, enabled through `NFSE_SEFIN_LATENCY_METRICS`, and emitted for the external request only; keep them separate from API route latency when integrating observability.
 
