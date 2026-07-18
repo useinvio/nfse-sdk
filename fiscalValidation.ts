@@ -44,12 +44,12 @@ const PIS_COFINS_CST = new Set([
 ]);
 
 export class DpsFiscalValidationError extends Error {
-  constructor(
-    public readonly issues: string[],
-    public readonly report?: DpsValidationReport,
-  ) {
-    super(`JSON da DPS invalido: ${issues.join('; ')}`);
+  public readonly issues: DpsValidationIssue[];
+
+  constructor(public readonly report: DpsValidationReport) {
+    super(`JSON da DPS invalido: ${report.issues.map((issue) => issue.message).join('; ')}`);
     this.name = 'DpsFiscalValidationError';
+    this.issues = report.issues;
   }
 }
 
@@ -149,30 +149,6 @@ export function validationIssueFromMessage(message: string): DpsValidationIssue 
     message: override?.message ?? normalized,
     ...(override?.suggestion ? { suggestion: override.suggestion } : {}),
   };
-}
-
-/** Non-throwing validation entry point shared by APIs and workers. */
-export function validateDpsJson<T extends DpsJsonRequest>(request: T): DpsValidationReport<T> {
-  try {
-    validateDpsJsonRequest(request);
-    return {
-      valid: true,
-      schemaVersion: DPS_SCHEMA_VERSION,
-      issues: [],
-      warnings: [],
-      normalizedPayload: request,
-    };
-  } catch (error) {
-    if (!(error instanceof DpsFiscalValidationError)) throw error;
-    const issues = error.issues.map(validationIssueFromMessage);
-    return {
-      valid: false,
-      schemaVersion: DPS_SCHEMA_VERSION,
-      issues,
-      warnings: [],
-      normalizedPayload: request,
-    };
-  }
 }
 
 function issue(issues: string[], message: string): void {
@@ -430,7 +406,7 @@ function validateTribFed(issues: string[], emissao: DpsJsonInput): void {
   assertDecimal(issues, 'emissao.tributacaoFederal.piscofins.vCofins', piscofins.vCofins);
 }
 
-export function validateDpsJsonRequest(request: DpsJsonRequest): void {
+function collectDpsValidationIssues(request: DpsJsonRequest): string[] {
   const issues: string[] = [];
   if (request.ambiente !== undefined && request.ambiente !== 'restrita' && request.ambiente !== 'producao') {
     issue(issues, 'ambiente deve ser restrita ou producao');
@@ -451,7 +427,23 @@ export function validateDpsJsonRequest(request: DpsJsonRequest): void {
   validateComercioExterior(issues, request.emissao);
   validateUnsupportedShapes(issues, request.emissao);
 
-  if (issues.length > 0) {
-    throw new DpsFiscalValidationError(issues);
-  }
+  return issues;
+}
+
+/** Canonical non-throwing validation API shared by clients, APIs and workers. */
+export function validateDpsJsonRequest<T extends DpsJsonRequest>(request: T): DpsValidationReport<T> {
+  const issues = collectDpsValidationIssues(request).map(validationIssueFromMessage);
+  return {
+    valid: issues.length === 0,
+    schemaVersion: DPS_SCHEMA_VERSION,
+    issues,
+    warnings: [],
+    normalizedPayload: request,
+  };
+}
+
+/** Assertion used by builders that cannot produce output from an invalid request. */
+export function assertValidDpsJsonRequest(request: DpsJsonRequest): void {
+  const report = validateDpsJsonRequest(request);
+  if (!report.valid) throw new DpsFiscalValidationError(report);
 }

@@ -1,5 +1,5 @@
 import { DEFAULT_AMBIENTE, TP_AMB } from './config.js';
-import { validateDpsJsonRequest } from './fiscalValidation.js';
+import { assertValidDpsJsonRequest } from './fiscalValidation.js';
 import type { Ambiente } from './config.js';
 
 const NS = 'http://www.sped.fazenda.gov.br/nfse';
@@ -464,7 +464,7 @@ function buildComExt(input: DpsJsonInput, comExt: Partial<ComExt>): string {
 
 export function buildDpsFromJson(input: DpsJsonRequest | string): BuiltDps {
   const request = normalizeRequest(input);
-  validateDpsJsonRequest(request);
+  assertValidDpsJsonRequest(request);
   const ambiente = request.ambiente ?? DEFAULT_AMBIENTE;
   const { prestador, servico } = request;
   const emissao = request.emissao;

@@ -52,7 +52,7 @@ export type {
 export {
   DPS_SCHEMA_VERSION,
   DpsFiscalValidationError,
-  validateDpsJson,
+  assertValidDpsJsonRequest,
   validateDpsJsonRequest,
   validationIssueFromMessage,
 } from './fiscalValidation.js';
