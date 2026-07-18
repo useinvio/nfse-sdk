@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildDpsFromJson, buildDpsId, DpsFiscalValidationError, TP_AMB, type DpsJsonRequest } from '../index.js';
+import { buildDpsFromJson, buildDpsId, DpsFiscalValidationError, TP_AMB, validateDpsJsonRequest, type DpsJsonRequest } from '../index.js';
 
 const request: DpsJsonRequest = {
   ambiente: 'restrita',
@@ -101,9 +101,25 @@ test('buildDpsFromJson rejects missing fiscal blocks instead of assuming default
     () => buildDpsFromJson(invalid),
     (error) =>
       error instanceof DpsFiscalValidationError &&
-      error.issues.includes('emissao.tributacaoMunicipal e obrigatorio; a SDK nao assume tribISSQN/tpRetISSQN por default') &&
-      error.issues.includes('emissao.totTrib e obrigatorio; informe vTotTrib(Fed/Est/Mun), pTotTrib(Fed/Est/Mun), pTotTribSN ou indTotTrib=0'),
+      error.issues.some((issue) => issue.code === 'TRIB_ISSQN_REQUIRED') &&
+      error.issues.some((issue) => issue.code === 'TOT_TRIB_REQUIRED'),
   );
+});
+
+test('validateDpsJsonRequest returns stable codes and field paths without throwing', () => {
+  const report = validateDpsJsonRequest({
+    ...request,
+    emissao: { ...request.emissao, tributacaoMunicipal: undefined, totTrib: undefined },
+  });
+
+  assert.equal(report.valid, false);
+  assert.equal(report.schemaVersion, '1.01');
+  assert.deepEqual(
+    report.issues.filter((item) => item.code === 'TRIB_ISSQN_REQUIRED').map((item) => item.path),
+    ['tributacaoMunicipal.tribISSQN'],
+  );
+  assert.equal(report.issues.find((item) => item.code === 'TOT_TRIB_REQUIRED')?.path, 'totTrib');
+  assert.deepEqual(report.warnings, []);
 });
 
 test('buildDpsFromJson accepts indTotTrib=0 for non-Simples providers', () => {
@@ -145,7 +161,7 @@ test('buildDpsFromJson rejects pTotTribSN for non-Simples providers', () => {
     () => buildDpsFromJson(invalid),
     (error) =>
       error instanceof DpsFiscalValidationError &&
-      error.issues.includes('emissao.totTrib.pTotTribSN nao deve ser informado para prestador.opSimpNac = 1'),
+      error.issues.some((issue) => issue.message.includes('totTrib.pTotTribSN nao deve ser informado')),
   );
 });
 
@@ -176,12 +192,12 @@ test('buildDpsFromJson rejects invalid national domain values', () => {
     () => buildDpsFromJson(invalid),
     (error) =>
       error instanceof DpsFiscalValidationError &&
-      error.issues.includes('prestador.opSimpNac deve ser um de: 1, 2, 3') &&
-      error.issues.includes('servico.cTribNac deve seguir 6 digitos numericos') &&
-      error.issues.includes('servico.cNBS deve seguir 9 digitos numericos') &&
-      error.issues.includes('emissao.nDPS deve seguir 1 a 15 digitos, sem zero inicial') &&
-      error.issues.includes('emissao.tributacaoMunicipal.tpRetISSQN deve ser um de: 1, 2, 3') &&
-      error.issues.includes('emissao.tributacaoMunicipal.cPaisResult deve seguir ISO-3166 alpha-2'),
+      error.issues.some((issue) => issue.message.includes('prestador.opSimpNac deve ser um de')) &&
+      error.issues.some((issue) => issue.message.includes('servico.cTribNac deve seguir')) &&
+      error.issues.some((issue) => issue.message.includes('servico.cNBS deve seguir')) &&
+      error.issues.some((issue) => issue.message.includes('nDPS deve seguir')) &&
+      error.issues.some((issue) => issue.message.includes('tributacaoMunicipal.tpRetISSQN deve ser um de')) &&
+      error.issues.some((issue) => issue.message.includes('tributacaoMunicipal.cPaisResult deve seguir')),
   );
 });
 
@@ -210,10 +226,10 @@ test('buildDpsFromJson rejects fiscal combinations that would generate unsafe XM
     () => buildDpsFromJson(invalid),
     (error) =>
       error instanceof DpsFiscalValidationError &&
-      error.issues.includes('emissao.tributacaoMunicipal.tpImunidade e obrigatorio') &&
-      error.issues.includes('emissao.tributacaoMunicipal.cPaisResult so deve ser informado quando tribISSQN = 3') &&
-      error.issues.includes('emissao.tributacaoMunicipal.pAliq nao deve ser informado quando prestador.opSimpNac = 1') &&
-      error.issues.includes('emissao.tribNac ainda nao e suportado; IBS/CBS no layout v1.01 exige o bloco RTC IBSCBS oficial') &&
-      error.issues.includes('emissao.valores.vDesc/vDedRed ainda nao sao suportados no shape correto do layout v1.01'),
+      error.issues.some((issue) => issue.code === 'TRIB_IMMUNITY_TYPE_REQUIRED') &&
+      error.issues.some((issue) => issue.message.includes('tributacaoMunicipal.cPaisResult so deve ser informado')) &&
+      error.issues.some((issue) => issue.message.includes('tributacaoMunicipal.pAliq nao deve ser informado')) &&
+      error.issues.some((issue) => issue.message.includes('tribNac ainda nao e suportado')) &&
+      error.issues.some((issue) => issue.message.includes('valores.vDesc/vDedRed ainda nao sao suportados')),
   );
 });
