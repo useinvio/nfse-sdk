@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildDpsFromJson, buildDpsId, DpsFiscalValidationError, TP_AMB, type DpsJsonRequest } from '../index.js';
+import { buildDpsFromJson, buildDpsId, DpsFiscalValidationError, TP_AMB, validateDpsJson, type DpsJsonRequest } from '../index.js';
 
 const request: DpsJsonRequest = {
   ambiente: 'restrita',
@@ -104,6 +104,22 @@ test('buildDpsFromJson rejects missing fiscal blocks instead of assuming default
       error.issues.includes('emissao.tributacaoMunicipal e obrigatorio; a SDK nao assume tribISSQN/tpRetISSQN por default') &&
       error.issues.includes('emissao.totTrib e obrigatorio; informe vTotTrib(Fed/Est/Mun), pTotTrib(Fed/Est/Mun), pTotTribSN ou indTotTrib=0'),
   );
+});
+
+test('validateDpsJson returns stable codes and field paths without throwing', () => {
+  const report = validateDpsJson({
+    ...request,
+    emissao: { ...request.emissao, tributacaoMunicipal: undefined, totTrib: undefined },
+  });
+
+  assert.equal(report.valid, false);
+  assert.equal(report.schemaVersion, '1.01');
+  assert.deepEqual(
+    report.issues.filter((item) => item.code === 'TRIB_ISSQN_REQUIRED').map((item) => item.path),
+    ['tributacaoMunicipal.tribISSQN'],
+  );
+  assert.equal(report.issues.find((item) => item.code === 'TOT_TRIB_REQUIRED')?.path, 'totTrib');
+  assert.deepEqual(report.warnings, []);
 });
 
 test('buildDpsFromJson accepts indTotTrib=0 for non-Simples providers', () => {

@@ -1,6 +1,6 @@
 {
   "name": "@useinvio/nfse-sdk",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "description": "TypeScript SDK for Brazil's national NFS-e: JSON to DPS/XML, XMLDSIG, GZip/Base64, mTLS and SEFIN errors.",
   "type": "module",
   "main": "./dist/index.js",
@@ -16,13 +16,15 @@
     "dist/*.d.ts",
     "dist/*.js",
     "dist/*.js.map",
+    "dist/schemas/**/*.xsd",
     "docs/*.md",
     "examples/*.ts",
     "examples/README.md",
     "README.md",
     "JSON_MAPPING.md",
     "llms.txt",
-    "LICENSE"
+    "LICENSE",
+    "schemas/**/*.xsd"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

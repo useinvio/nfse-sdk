@@ -44,9 +44,134 @@ const PIS_COFINS_CST = new Set([
 ]);
 
 export class DpsFiscalValidationError extends Error {
-  constructor(public readonly issues: string[]) {
+  constructor(
+    public readonly issues: string[],
+    public readonly report?: DpsValidationReport,
+  ) {
     super(`JSON da DPS invalido: ${issues.join('; ')}`);
     this.name = 'DpsFiscalValidationError';
+  }
+}
+
+export const DPS_SCHEMA_VERSION = '1.01';
+
+export type ValidationSeverity = 'error' | 'warning';
+export type ValidationSource = 'sdk' | 'invio';
+
+export interface DpsValidationIssue {
+  code: string;
+  path: string;
+  severity: ValidationSeverity;
+  source: ValidationSource;
+  message: string;
+  suggestion?: string;
+}
+
+export interface DpsValidationReport<T = unknown> {
+  valid: boolean;
+  schemaVersion: typeof DPS_SCHEMA_VERSION;
+  issues: DpsValidationIssue[];
+  warnings: DpsValidationIssue[];
+  normalizedPayload: T;
+}
+
+const ISSUE_OVERRIDES: Array<{
+  test: RegExp;
+  code: string;
+  path: string;
+  message?: string;
+  suggestion?: string;
+}> = [
+  {
+    test: /tributacaoMunicipal(?:\.tribISSQN)? e obrigatorio/,
+    code: 'TRIB_ISSQN_REQUIRED',
+    path: 'tributacaoMunicipal.tribISSQN',
+    message: 'A tributação municipal é obrigatória.',
+    suggestion: 'Informe o tratamento do ISSQN.',
+  },
+  {
+    test: /tributacaoMunicipal\.tpRetISSQN e obrigatorio/,
+    code: 'TRIB_ISSQN_WITHHOLDING_REQUIRED',
+    path: 'tributacaoMunicipal.tpRetISSQN',
+    suggestion: 'Informe o tratamento da retencao do ISSQN.',
+  },
+  {
+    test: /tributacaoMunicipal\.cPaisResult e obrigatorio/,
+    code: 'TRIB_COUNTRY_RESULT_REQUIRED',
+    path: 'tributacaoMunicipal.cPaisResult',
+  },
+  {
+    test: /tributacaoMunicipal\.tpImunidade e obrigatorio/,
+    code: 'TRIB_IMMUNITY_TYPE_REQUIRED',
+    path: 'tributacaoMunicipal.tpImunidade',
+  },
+  {
+    test: /totTrib e obrigatorio|totTrib deve informar/,
+    code: 'TOT_TRIB_REQUIRED',
+    path: 'totTrib',
+    suggestion: 'Informe uma unica modalidade de carga tributaria aproximada.',
+  },
+  {
+    test: /totTrib e um xs:choice/,
+    code: 'TOT_TRIB_CHOICE_CONFLICT',
+    path: 'totTrib',
+    suggestion: 'Mantenha somente uma modalidade de carga tributaria aproximada.',
+  },
+];
+
+function inferredPath(message: string): string {
+  const match = message.match(/(?:emissao\.)?([A-Za-z][\w]*(?:\.[A-Za-z][\w]*)*)/);
+  return (match?.[1] ?? '$').replace(/^emissao\./, '');
+}
+
+function inferredCode(message: string, path: string): string {
+  const suffix = /obrigatorio|ausente/.test(message)
+    ? 'REQUIRED'
+    : /deve ser um de/.test(message)
+      ? 'INVALID_ENUM'
+      : /deve seguir/.test(message)
+        ? 'INVALID_FORMAT'
+        : /numerico/.test(message)
+          ? 'INVALID_NUMBER'
+          : 'INVALID_COMBINATION';
+  return `${path.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[^A-Za-z0-9]+/g, '_').toUpperCase()}_${suffix}`;
+}
+
+export function validationIssueFromMessage(message: string): DpsValidationIssue {
+  const normalized = message.replace(/^emissao\./, '');
+  const override = ISSUE_OVERRIDES.find(({ test }) => test.test(normalized));
+  const path = override?.path ?? inferredPath(normalized);
+  return {
+    code: override?.code ?? inferredCode(normalized, path),
+    path,
+    severity: 'error',
+    source: 'sdk',
+    message: override?.message ?? normalized,
+    ...(override?.suggestion ? { suggestion: override.suggestion } : {}),
+  };
+}
+
+/** Non-throwing validation entry point shared by APIs and workers. */
+export function validateDpsJson<T extends DpsJsonRequest>(request: T): DpsValidationReport<T> {
+  try {
+    validateDpsJsonRequest(request);
+    return {
+      valid: true,
+      schemaVersion: DPS_SCHEMA_VERSION,
+      issues: [],
+      warnings: [],
+      normalizedPayload: request,
+    };
+  } catch (error) {
+    if (!(error instanceof DpsFiscalValidationError)) throw error;
+    const issues = error.issues.map(validationIssueFromMessage);
+    return {
+      valid: false,
+      schemaVersion: DPS_SCHEMA_VERSION,
+      issues,
+      warnings: [],
+      normalizedPayload: request,
+    };
   }
 }
 
@@ -110,6 +235,9 @@ function validateServico(issues: string[], servico: ServicoProfile, emissao: Dps
   if (cNBS !== undefined) {
     assertPattern(issues, 'servico.cNBS', cNBS, /^\d{9}$/, '9 digitos numericos');
   }
+  if (!(emissao.servico?.xDescServ ?? emissao.xDescServ ?? servico.xDescServ)?.trim()) {
+    issue(issues, 'servico.xDescServ e obrigatorio');
+  }
 }
 
 function validatePessoa(
@@ -124,6 +252,64 @@ function validatePessoa(
   }
   if (!pessoa.xNome) {
     issue(issues, `${field}.xNome e obrigatorio quando ${field} for informado`);
+  }
+  if (pessoa.CNPJ !== undefined && !/^\d{14}$/.test(pessoa.CNPJ)) issue(issues, `${field}.CNPJ deve seguir 14 digitos numericos`);
+  if (pessoa.CPF !== undefined && !/^\d{11}$/.test(pessoa.CPF)) issue(issues, `${field}.CPF deve seguir 11 digitos numericos`);
+
+  const endereco = 'end' in pessoa ? pessoa.end as {
+    endNac?: { cMun?: string; CEP?: string };
+    endExt?: { cPais?: string; cEndPost?: string; xCidade?: string; xEstProvReg?: string };
+    xLgr?: string;
+    nro?: string;
+    xBairro?: string;
+  } | undefined : undefined;
+  if (endereco) {
+    if (Boolean(endereco.endNac) === Boolean(endereco.endExt)) {
+      issue(issues, `${field}.end deve informar exatamente um de endNac ou endExt`);
+    }
+    if (endereco.endNac) {
+      assertPattern(issues, `${field}.end.endNac.cMun`, endereco.endNac.cMun, /^\d{7}$/, 'codigo IBGE com 7 digitos');
+      assertPattern(issues, `${field}.end.endNac.CEP`, endereco.endNac.CEP, /^\d{8}$/, '8 digitos numericos');
+    }
+    if (endereco.endExt) {
+      assertPattern(issues, `${field}.end.endExt.cPais`, endereco.endExt.cPais, /^[A-Z]{2}$/, 'ISO-3166 alpha-2');
+      for (const key of ['cEndPost', 'xCidade', 'xEstProvReg'] as const) {
+        if (!endereco.endExt[key]) issue(issues, `${field}.end.endExt.${key} e obrigatorio`);
+      }
+    }
+    for (const key of ['xLgr', 'nro', 'xBairro'] as const) {
+      if (!endereco[key]) issue(issues, `${field}.end.${key} e obrigatorio`);
+    }
+  }
+}
+
+function validateDates(issues: string[], emissao: DpsJsonInput): void {
+  if (emissao.dhEmi !== undefined && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?[+-]\d{2}:\d{2}$/.test(emissao.dhEmi)) {
+    issue(issues, 'emissao.dhEmi deve seguir YYYY-MM-DDThh:mm:ss-03:00');
+  }
+  if (emissao.dCompet !== undefined) {
+    const parts = emissao.dCompet.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const parsed = parts ? new Date(Date.UTC(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]))) : null;
+    if (!parts || !parsed || parsed.getUTCFullYear() !== Number(parts[1]) || parsed.getUTCMonth() !== Number(parts[2]) - 1 || parsed.getUTCDate() !== Number(parts[3])) {
+      issue(issues, 'emissao.dCompet deve ser uma data valida no formato YYYY-MM-DD');
+    }
+  }
+}
+
+function validateValores(issues: string[], emissao: DpsJsonInput): void {
+  const vServ = emissao.valores?.vServ ?? emissao.vServ;
+  const vServMoeda = emissao.valores?.vServMoeda ?? emissao.vServMoeda;
+  const cotacao = emissao.valores?.cotacao ?? emissao.cotacao;
+  if (vServ === undefined && (vServMoeda === undefined || cotacao === undefined)) {
+    issue(issues, 'emissao.valores.vServ e obrigatorio, ou informe valores.vServMoeda e valores.cotacao');
+  }
+  for (const [path, value] of [
+    ['emissao.valores.vServ', vServ],
+    ['emissao.valores.vServMoeda', vServMoeda],
+    ['emissao.valores.cotacao', cotacao],
+  ] as const) {
+    assertDecimal(issues, path, value);
+    if (value !== undefined && Number.isFinite(Number(value)) && Number(value) <= 0) issue(issues, `${path} deve ser maior que zero`);
   }
 }
 
@@ -188,6 +374,13 @@ function validateTotTrib(issues: string[], emissao: DpsJsonInput, opSimpNac: str
     );
   }
 
+  if (hasVTotTrib && [tot.vTotTribFed, tot.vTotTribEst, tot.vTotTribMun].some((value) => value === undefined)) {
+    issue(issues, 'emissao.totTrib.vTotTrib deve informar Fed, Est e Mun');
+  }
+  if (hasPTotTrib && [tot.pTotTribFed, tot.pTotTribEst, tot.pTotTribMun].some((value) => value === undefined)) {
+    issue(issues, 'emissao.totTrib.pTotTrib deve informar Fed, Est e Mun');
+  }
+
   if (opSimpNac === '1' && tot.pTotTribSN !== undefined) {
     issue(issues, 'emissao.totTrib.pTotTribSN nao deve ser informado para prestador.opSimpNac = 1');
   }
@@ -239,15 +432,17 @@ function validateTribFed(issues: string[], emissao: DpsJsonInput): void {
 
 export function validateDpsJsonRequest(request: DpsJsonRequest): void {
   const issues: string[] = [];
+  if (request.ambiente !== undefined && request.ambiente !== 'restrita' && request.ambiente !== 'producao') {
+    issue(issues, 'ambiente deve ser restrita ou producao');
+  }
   validatePrestador(issues, request.prestador);
   validateServico(issues, request.servico, request.emissao);
   assertPattern(issues, 'emissao.nDPS', request.emissao.nDPS, /^[1-9][0-9]{0,14}$/, '1 a 15 digitos, sem zero inicial');
   if (request.emissao.serie !== undefined) {
     assertPattern(issues, 'emissao.serie', request.emissao.serie, /^\d{1,5}$/, 'serie numerica com ate 5 digitos');
   }
-  assertDecimal(issues, 'emissao.valores.vServ', request.emissao.valores?.vServ ?? request.emissao.vServ);
-  assertDecimal(issues, 'emissao.valores.vServMoeda', request.emissao.valores?.vServMoeda ?? request.emissao.vServMoeda);
-  assertDecimal(issues, 'emissao.valores.cotacao', request.emissao.valores?.cotacao ?? request.emissao.cotacao);
+  validateDates(issues, request.emissao);
+  validateValores(issues, request.emissao);
   validatePessoa(issues, 'emissao.tomador', request.emissao.tomador);
   validatePessoa(issues, 'emissao.intermediario', request.emissao.intermediario);
   validateTribMun(issues, request.emissao.tributacaoMunicipal, request.prestador.opSimpNac);

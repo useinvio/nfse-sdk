@@ -49,10 +49,22 @@ export type {
   Valores,
 } from './dpsJson.js';
 
-export { DpsFiscalValidationError, validateDpsJsonRequest } from './fiscalValidation.js';
+export {
+  DPS_SCHEMA_VERSION,
+  DpsFiscalValidationError,
+  validateDpsJson,
+  validateDpsJsonRequest,
+  validationIssueFromMessage,
+} from './fiscalValidation.js';
+export type {
+  DpsValidationIssue,
+  DpsValidationReport,
+  ValidationSeverity,
+  ValidationSource,
+} from './fiscalValidation.js';
 
-export { EmitirNotaError, emitirNfse } from './emissaoNota.js';
-export type { EmitirNotaOptions, NotaInput, ResultadoEmissaoNota } from './emissaoNota.js';
+export { EmitirNotaError, emitirNfse, prepararNota, transmitirNotaPreparada } from './emissaoNota.js';
+export type { EmitirNotaOptions, NotaInput, NotaPreparada, ResultadoEmissaoNota } from './emissaoNota.js';
 
 export { NfseClient } from './client.js';
 export type {
@@ -68,5 +80,9 @@ export { gzipBase64, gunzipBase64 } from './gzipB64.js';
 
 export { signDps, signEnveloped, verifyDps, withUtf8XmlDeclaration } from './signXml.js';
 
+export { DpsXsdValidationError, validateDpsXmlAgainstXsd } from './xsdValidation.js';
+
 export { loadPfxFromBuffer, loadPfx } from './loadPfx.js';
 export type { PfxMaterial } from './loadPfx.js';
+
+export { assertCertificateForProvider, CertificateValidationError } from './certificateValidation.js';
