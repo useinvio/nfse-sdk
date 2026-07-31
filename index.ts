@@ -80,7 +80,7 @@ export { gzipBase64, gunzipBase64 } from './gzipB64.js';
 
 export { signDps, signEnveloped, verifyDps, withUtf8XmlDeclaration } from './signXml.js';
 
-export { DpsXsdValidationError, validateDpsXmlAgainstXsd } from './xsdValidation.js';
+export { DpsXsdValidationError, XmllintUnavailableError, validateDpsXmlAgainstXsd } from './xsdValidation.js';
 
 export { loadPfxFromBuffer, loadPfx } from './loadPfx.js';
 export type { PfxMaterial } from './loadPfx.js';
