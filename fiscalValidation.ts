@@ -6,6 +6,7 @@ const REG_ESP_TRIB = new Set(['0', '1', '2', '3', '4', '5', '6', '9']);
 const TRIB_ISSQN = new Set(['1', '2', '3', '4']);
 const TP_IMUNIDADE = new Set(['0', '1', '2', '3', '4', '5']);
 const TP_RET_ISSQN = new Set(['1', '2', '3']);
+const C_NAO_NIF = new Set(['1', '2']);
 const PIS_COFINS_CST = new Set([
   '00',
   '01',
@@ -177,13 +178,16 @@ function assertEnum(issues: string[], field: string, value: string | undefined, 
 
 function assertDecimal(issues: string[], field: string, value: string | number | undefined): void {
   if (value === undefined || value === '') return;
-  if (!Number.isFinite(Number(value))) {
-    issue(issues, `${field} deve ser numerico`);
+  if (!/^\d+(?:\.\d+)?$/.test(String(value))) {
+    issue(issues, `${field} deve ser decimal positivo, sem notacao exponencial`);
   }
 }
 
 function validatePrestador(issues: string[], prestador: PrestadorProfile): void {
-  assertPattern(issues, 'prestador.cnpj', prestador.cnpj, /^\d{14}$/, '14 digitos numericos');
+  const identifiers = [prestador.cnpj, prestador.cpf].filter((value) => value !== undefined && value !== '');
+  if (identifiers.length !== 1) issue(issues, 'prestador deve informar exatamente um identificador: CNPJ ou CPF');
+  if (prestador.cnpj !== undefined) assertPattern(issues, 'prestador.cnpj', prestador.cnpj, /^\d{14}$/, '14 digitos numericos');
+  if (prestador.cpf !== undefined) assertPattern(issues, 'prestador.cpf', prestador.cpf, /^\d{11}$/, '11 digitos numericos');
   assertPattern(issues, 'prestador.cLocEmi', prestador.cLocEmi, /^\d{7}$/, 'codigo IBGE com 7 digitos');
   assertPattern(issues, 'prestador.serie', prestador.serie, /^\d{1,5}$/, 'serie numerica com ate 5 digitos');
   assertEnum(issues, 'prestador.opSimpNac', prestador.opSimpNac, OP_SIMP_NAC);
@@ -231,6 +235,7 @@ function validatePessoa(
   }
   if (pessoa.CNPJ !== undefined && !/^\d{14}$/.test(pessoa.CNPJ)) issue(issues, `${field}.CNPJ deve seguir 14 digitos numericos`);
   if (pessoa.CPF !== undefined && !/^\d{11}$/.test(pessoa.CPF)) issue(issues, `${field}.CPF deve seguir 11 digitos numericos`);
+  if (pessoa.cNaoNIF !== undefined) assertEnum(issues, `${field}.cNaoNIF`, pessoa.cNaoNIF, C_NAO_NIF);
 
   const endereco = 'end' in pessoa ? pessoa.end as {
     endNac?: { cMun?: string; CEP?: string };
@@ -357,8 +362,14 @@ function validateTotTrib(issues: string[], emissao: DpsJsonInput, opSimpNac: str
     issue(issues, 'emissao.totTrib.pTotTrib deve informar Fed, Est e Mun');
   }
 
-  if (opSimpNac === '1' && tot.pTotTribSN !== undefined) {
-    issue(issues, 'emissao.totTrib.pTotTribSN nao deve ser informado para prestador.opSimpNac = 1');
+  if (opSimpNac === '1' && (!hasPTotTrib || hasVTotTrib || hasIndTotTrib || hasPTotTribSN)) {
+    issue(issues, 'emissao.totTrib para nao optante exige somente pTotTribFed, pTotTribEst e pTotTribMun');
+  }
+  if (opSimpNac === '2' && (!hasIndTotTrib || tot.indTotTrib !== '0' || hasVTotTrib || hasPTotTrib || hasPTotTribSN)) {
+    issue(issues, 'emissao.totTrib para MEI exige somente indTotTrib=0');
+  }
+  if (opSimpNac === '3' && (!hasPTotTribSN || hasVTotTrib || hasPTotTrib || hasIndTotTrib)) {
+    issue(issues, 'emissao.totTrib para ME/EPP exige somente pTotTribSN');
   }
 
   assertDecimal(issues, 'emissao.totTrib.vTotTribFed', tot.vTotTribFed);
@@ -395,6 +406,29 @@ function validateComercioExterior(issues: string[], emissao: DpsJsonInput): void
   assertDecimal(issues, 'emissao.comercioExterior.vServMoeda', comExt.vServMoeda ?? emissao.valores?.vServMoeda ?? emissao.vServMoeda);
 }
 
+function validateOperationMatrix(issues: string[], emissao: DpsJsonInput): void {
+  const isExport = Boolean(emissao.comercioExterior ?? emissao.comExt);
+  const valores = emissao.valores ?? emissao;
+  const tomador = emissao.tomador;
+  const end = tomador?.end;
+  if (!isExport) {
+    if (valores.vServMoeda !== undefined || valores.cotacao !== undefined || emissao.tributacaoMunicipal?.cPaisResult !== undefined) {
+      issue(issues, 'emissao nacional nao pode informar moeda estrangeira, cotacao ou pais do resultado');
+    }
+    if (tomador && (!tomador.CNPJ && !tomador.CPF || tomador.NIF !== undefined || tomador.cNaoNIF !== undefined || end?.endExt || !end?.endNac)) {
+      issue(issues, 'tomador nacional exige CPF/CNPJ e endNac; NIF e endExt sao proibidos');
+    }
+    return;
+  }
+
+  if (valores.vServMoeda === undefined || valores.cotacao === undefined || emissao.tributacaoMunicipal?.cPaisResult === undefined) {
+    issue(issues, 'exportacao exige valor em moeda estrangeira, cotacao e pais do resultado');
+  }
+  if (tomador && (!tomador.NIF && !tomador.cNaoNIF || tomador.CNPJ !== undefined || tomador.CPF !== undefined || end?.endNac || !end?.endExt)) {
+    issue(issues, 'tomador exterior exige NIF ou motivo e endExt; CPF/CNPJ e endNac sao proibidos');
+  }
+}
+
 function validateTribFed(issues: string[], emissao: DpsJsonInput): void {
   const piscofins = emissao.tributacaoFederal?.piscofins;
   if (!piscofins) return;
@@ -425,6 +459,7 @@ function collectDpsValidationIssues(request: DpsJsonRequest): string[] {
   validateTribFed(issues, request.emissao);
   validateTotTrib(issues, request.emissao, request.prestador.opSimpNac);
   validateComercioExterior(issues, request.emissao);
+  validateOperationMatrix(issues, request.emissao);
   validateUnsupportedShapes(issues, request.emissao);
 
   return issues;

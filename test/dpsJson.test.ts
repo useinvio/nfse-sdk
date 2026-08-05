@@ -122,12 +122,12 @@ test('validateDpsJsonRequest returns stable codes and field paths without throwi
   assert.deepEqual(report.warnings, []);
 });
 
-test('buildDpsFromJson accepts indTotTrib=0 for non-Simples providers', () => {
+test('buildDpsFromJson accepts indTotTrib=0 only for MEI', () => {
   const valid: DpsJsonRequest = {
     ...request,
     prestador: {
       ...request.prestador,
-      opSimpNac: '1',
+      opSimpNac: '2',
     },
     emissao: {
       ...request.emissao,
@@ -142,7 +142,7 @@ test('buildDpsFromJson accepts indTotTrib=0 for non-Simples providers', () => {
   assert.match(xml, /<indTotTrib>0<\/indTotTrib>/);
 });
 
-test('buildDpsFromJson rejects pTotTribSN for non-Simples providers', () => {
+test('buildDpsFromJson rejects a tax branch incompatible with the emitter profile', () => {
   const invalid: DpsJsonRequest = {
     ...request,
     prestador: {
@@ -161,8 +161,41 @@ test('buildDpsFromJson rejects pTotTribSN for non-Simples providers', () => {
     () => buildDpsFromJson(invalid),
     (error) =>
       error instanceof DpsFiscalValidationError &&
-      error.issues.some((issue) => issue.message.includes('totTrib.pTotTribSN nao deve ser informado')),
+      error.issues.some((issue) => issue.message.includes('nao optante exige somente')),
   );
+});
+
+test('buildDpsFromJson enforces national/export recipient and value branches', () => {
+  const national = {
+    ...request,
+    emissao: {
+      ...request.emissao,
+      comercioExterior: undefined,
+      valores: { vServ: '100.00' },
+      tributacaoMunicipal: { tribISSQN: '1', tpRetISSQN: '1' },
+      tomador: {
+        CNPJ: '12345678000199', xNome: 'Cliente nacional',
+        end: { endNac: { cMun: '4106902', CEP: '80000000' }, xLgr: 'Rua A', nro: '1', xBairro: 'Centro' },
+      },
+    },
+  } satisfies DpsJsonRequest;
+  assert.equal(validateDpsJsonRequest(national).valid, true);
+  assert.equal(validateDpsJsonRequest({ ...national, emissao: { ...national.emissao, valores: { vServ: '100', cotacao: 5 } } }).valid, false);
+});
+
+test('buildDpsFromJson supports CPF prestador and exact decimal rounding', () => {
+  const cpfProvider: DpsJsonRequest = {
+    ...request,
+    prestador: { ...request.prestador, cnpj: undefined, cpf: '12345678901', tpInsc: '1' },
+    emissao: {
+      ...request.emissao, comercioExterior: undefined, valores: { vServ: '1.005' },
+      tributacaoMunicipal: { tribISSQN: '1', tpRetISSQN: '1' },
+    },
+  };
+  const { id, xml } = buildDpsFromJson(cpfProvider);
+  assert.match(id, /^DPS41069021\d{14}/);
+  assert.match(xml, /<prest><CPF>12345678901<\/CPF>/);
+  assert.match(xml, /<vServ>1.01<\/vServ>/);
 });
 
 test('buildDpsFromJson rejects invalid national domain values', () => {

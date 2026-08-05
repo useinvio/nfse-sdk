@@ -90,12 +90,12 @@ test('generated DPS XML validates against the official NFS-e Nacional v1.01 XSD'
   assertValidatesAgainstXsd(xml);
 });
 
-test('generated DPS XML with indTotTrib=0 validates for non-Simples providers', () => {
+test('generated DPS XML with indTotTrib=0 validates for MEI', () => {
   const { xml } = buildDpsFromJson({
     ...request,
     prestador: {
       ...request.prestador,
-      opSimpNac: '1',
+      opSimpNac: '2',
     },
     emissao: {
       ...request.emissao,
@@ -107,20 +107,20 @@ test('generated DPS XML with indTotTrib=0 validates for non-Simples providers', 
   assertValidatesAgainstXsd(xml);
 });
 
-test('generated DPS XML validates for a domestic invoice with tribISSQN=1 and pAliq', () => {
+test('generated DPS XML validates for a domestic invoice', () => {
   const { xml } = buildDpsFromJson({
     ...request,
     prestador: {
       ...request.prestador,
-      opSimpNac: '2',
+      opSimpNac: '1',
     },
     emissao: {
       ...request.emissao,
       comercioExterior: undefined,
+      valores: { vServ: '9000.00' },
       tributacaoMunicipal: {
         tribISSQN: '1',
         tpRetISSQN: '1',
-        pAliq: '2.5',
       },
     },
   });
@@ -145,30 +145,35 @@ test('generated DPS XML validates for PIS/COFINS with rates', () => {
   assertValidatesAgainstXsd(xml);
 });
 
-test('generated DPS XML validates for the vTotTrib(Fed/Est/Mun) branch', () => {
+test('generated DPS XML validates for another ME/EPP pTotTribSN rate', () => {
   const { xml } = buildDpsFromJson({
     ...request,
+    prestador: {
+      ...request.prestador,
+      opSimpNac: '3',
+    },
     emissao: {
       ...request.emissao,
       totTrib: {
-        vTotTribFed: '100.00',
-        vTotTribEst: '0',
-        vTotTribMun: '50.00',
+        pTotTribSN: '4.25',
       },
     },
   });
   assertValidatesAgainstXsd(xml);
 });
 
-test('generated DPS XML validates for the pTotTribSN branch (Simples Nacional)', () => {
+test('generated DPS XML validates for the pTotTribSN branch (ME/EPP)', () => {
   const { xml } = buildDpsFromJson({
     ...request,
     prestador: {
       ...request.prestador,
-      opSimpNac: '2',
+      opSimpNac: '3',
     },
     emissao: {
       ...request.emissao,
+      comercioExterior: undefined,
+      valores: { vServ: '9000.00' },
+      tributacaoMunicipal: { tribISSQN: '1', tpRetISSQN: '1' },
       totTrib: {
         pTotTribSN: '6',
       },
@@ -182,6 +187,9 @@ test('generated DPS XML validates for a tomador with endNac address', () => {
     ...request,
     emissao: {
       ...request.emissao,
+      comercioExterior: undefined,
+      valores: { vServ: '9000.00' },
+      tributacaoMunicipal: { tribISSQN: '1', tpRetISSQN: '1' },
       tomador: {
         CNPJ: '11222333000181',
         xNome: 'Cliente Exemplo',

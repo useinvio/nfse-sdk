@@ -24,11 +24,11 @@ export function assertCertificateForProvider(pfx: PfxMaterial, providerTaxId: st
   const expected = providerTaxId.replace(/\D/g, '');
   const subjectText = certificate.subject.attributes.map((attribute) => String(attribute.value)).join(' ');
   const derText = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();
-  const taxIds: string[] = `${subjectText} ${derText}`.match(/\d{14}/g) ?? [];
+  const taxIds: string[] = `${subjectText} ${derText}`.match(/\d{11}(?:\d{3})?/g) ?? [];
   if (!taxIds.includes(expected)) {
     throw new CertificateValidationError(
       'CERTIFICATE_HOLDER_MISMATCH',
-      'O titular do certificado digital nao corresponde ao CNPJ do emitente.',
+      'O titular do certificado digital nao corresponde ao CPF/CNPJ do emitente.',
     );
   }
 }

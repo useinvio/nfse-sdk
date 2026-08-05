@@ -7,8 +7,9 @@ const VERSAO = '1.01';
 const VER_APLIC = 'UseInvio';
 
 export interface PrestadorProfile {
-  cnpj: string;
-  /** tpInsc: 1 = CPF, 2 = CNPJ */
+  cnpj?: string;
+  cpf?: string;
+  /** tpInsc é derivado do CPF/CNPJ informado; mantido por compatibilidade. */
   tpInsc?: '1' | '2' | string;
   cLocEmi: string;
   serie: string;
@@ -232,34 +233,41 @@ function pad(value: string, length: number): string {
   return onlyDigits(value).padStart(length, '0');
 }
 
-function roundMoney(value: string | number): string {
-  return Number(value).toFixed(2);
+function decimalParts(value: string | number): { integer: bigint; scale: number } {
+  const text = String(value);
+  if (!/^\d+(?:\.\d+)?$/.test(text)) throw new Error(`Decimal invalido: ${text}`);
+  const [whole, fraction = ''] = text.split('.');
+  return { integer: BigInt(`${whole}${fraction}`), scale: fraction.length };
 }
 
-function roundRate(value: string | number): string {
-  return Number(value).toFixed(2);
+function fixedFromInteger(integer: bigint, scale: number, decimals = 2): string {
+  const divisor = 10n ** BigInt(Math.max(0, scale - decimals));
+  const scaled = scale > decimals ? (integer + divisor / 2n) / divisor : integer * 10n ** BigInt(decimals - scale);
+  const text = scaled.toString().padStart(decimals + 1, '0');
+  return `${text.slice(0, -decimals)}.${text.slice(-decimals)}`;
 }
 
-function roundTaxBurdenRate(value: string | number): string {
-  return Number(value).toFixed(2);
+function fixedDecimal(value: string | number, decimals = 2): string {
+  const { integer, scale } = decimalParts(value);
+  return fixedFromInteger(integer, scale, decimals);
 }
+
+function roundMoney(value: string | number): string { return fixedDecimal(value); }
+function roundRate(value: string | number): string { return fixedDecimal(value); }
+function roundTaxBurdenRate(value: string | number): string { return fixedDecimal(value); }
 
 function mulDecimal(a: string, b: number): string {
-  const scale = 1_000_000;
-  const result = (Math.round(Number(a) * scale) * Math.round(b * scale)) / (scale * scale);
-  return result.toFixed(2);
+  const left = decimalParts(a);
+  const right = decimalParts(b);
+  return fixedFromInteger(left.integer * right.integer, left.scale + right.scale, 2);
 }
 
-function nowOffset(date = new Date()): string {
-  const p = (n: number) => String(n).padStart(2, '0');
-  const tz = -date.getTimezoneOffset();
-  const sign = tz >= 0 ? '+' : '-';
-  const abs = Math.abs(tz);
-  const offset = `${sign}${p(Math.floor(abs / 60))}:${p(abs % 60)}`;
-  return (
-    `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}` +
-    `T${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}${offset}`
-  );
+function nowSaoPauloOffset(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date).reduce<Record<string, string>>((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}-03:00`;
 }
 
 function resolveVServ(input: DpsJsonInput): string {
@@ -280,13 +288,15 @@ function resolveVServMoeda(input: DpsJsonInput): string {
 }
 
 export function buildDpsId(prestador: PrestadorProfile, nDPS: string, serie = prestador.serie): string {
-  const cnpjDigits = prestador.cnpj.replace(/\D/g, '');
-  const tpInsc = cnpjDigits.length === 14 ? '2' : (prestador.tpInsc ?? '1');
+  const taxId = prestador.cnpj ?? prestador.cpf;
+  if (!taxId) throw new Error('Prestador deve informar CNPJ ou CPF.');
+  const taxIdDigits = taxId.replace(/\D/g, '');
+  const tpInsc = taxIdDigits.length === 14 ? '2' : '1';
   const id =
     'DPS' +
     pad(prestador.cLocEmi, 7) +
     tpInsc +
-    pad(cnpjDigits, 14) +
+    pad(taxIdDigits, 14) +
     pad(serie, 5) +
     pad(nDPS, 15);
 
@@ -470,7 +480,7 @@ export function buildDpsFromJson(input: DpsJsonRequest | string): BuiltDps {
   const emissao = request.emissao;
   const serie = emissao.serie ?? prestador.serie;
   const id = buildDpsId(prestador, emissao.nDPS, serie);
-  const dhEmi = emissao.dhEmi ?? nowOffset();
+  const dhEmi = emissao.dhEmi ?? nowSaoPauloOffset();
   const dCompet = emissao.dCompet ?? dhEmi.slice(0, 10);
   const serviceOverride = emissao.servico;
   const comExt = emissao.comercioExterior ?? emissao.comExt;
@@ -478,7 +488,7 @@ export function buildDpsFromJson(input: DpsJsonRequest | string): BuiltDps {
 
   const prest = el(
     'prest',
-    requiredTextEl('CNPJ', prestador.cnpj) +
+    (prestador.cnpj ? requiredTextEl('CNPJ', prestador.cnpj) : requiredTextEl('CPF', prestador.cpf)) +
       el(
         'regTrib',
         requiredTextEl('opSimpNac', prestador.opSimpNac) +
