@@ -6,13 +6,16 @@ This local plugin wraps `@useinvio/nfse-sdk` for Codex desktop and other hosts t
 
 | Tool | Certificate | Effect |
 | --- | --- | --- |
+| `get_dps_questions` | No | Turns a partial DPS into focused questions for the missing or invalid fiscal data. |
 | `validate_dps_json` | No | Returns structured validation errors and warnings. |
 | `build_dps_xml` | No | Returns unsigned DPS XML. |
 | `validate_dps_xml` | No | Validates DPS XML against XSD 1.01. |
 | `prepare_nfse` | A1/PFX in base64 | Validates and signs locally; does not transmit. |
 | `emit_nfse` | A1/PFX in base64 | Signs and sends to the selected SEFIN environment. |
 
-The server accepts PFX content and password only as one tool call's arguments. It does not write, log, cache, or retain them. The host must provide Node 20+ and `xmllint`.
+Use `get_dps_questions` first when the user has not yet supplied a complete DPS. It only asks for fiscal data; it never asks for a certificate. The host must provide Node 20+ and `xmllint`.
+
+For signing, the current compatibility interface accepts PFX content and password only as one tool call's arguments. It does not write, log, cache, or retain them. In production, prefer a local operating-system secret store and pass a certificate reference instead of placing a password in the conversation or a tool payload.
 
 ## Local setup
 

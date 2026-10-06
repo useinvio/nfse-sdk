@@ -23,8 +23,14 @@ test('local MCP server exposes certificate-free DPS tools', async () => {
   try {
     const listed = await client.listTools();
     assert.deepEqual(listed.tools.map(tool => tool.name), [
-      'validate_dps_json', 'build_dps_xml', 'validate_dps_xml', 'prepare_nfse', 'emit_nfse',
+      'get_dps_questions', 'validate_dps_json', 'build_dps_xml', 'validate_dps_xml', 'prepare_nfse', 'emit_nfse',
     ]);
+
+    const questions = await client.callTool({ name: 'get_dps_questions', arguments: { dps: {} } });
+    const interview = JSON.parse(questions.content[0].text);
+    assert.equal(interview.readyForXml, false);
+    assert.ok(interview.questions.length > 0);
+    assert.equal(interview.questions.some(question => /certificado/i.test(question.question)), false);
 
     const invalid = await client.callTool({ name: 'validate_dps_json', arguments: { dps: {} } });
     assert.equal(invalid.isError, undefined);

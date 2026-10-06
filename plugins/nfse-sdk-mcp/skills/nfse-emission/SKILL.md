@@ -5,6 +5,8 @@ description: Use when the user wants to validate DPS JSON/XML, generate DPS XML,
 
 # NFS-e emission workflow
 
+When the user has a partial DPS or needs guidance, call `get_dps_questions` first. Ask only its returned fiscal questions, then repeat it until `readyForXml` is true. Do not ask for a certificate during this stage.
+
 Use `validate_dps_json` before generating or sending a DPS. Explain `issues` as blocking errors and `warnings` as non-blocking discrepancies. Then use `build_dps_xml` for JSON input, or `validate_dps_xml` for external XML.
 
 Only call `prepare_nfse` or `emit_nfse` after the user has explicitly supplied an A1/PFX certificate as base64 and its password for this operation. Do not ask for, store, repeat, log, or include certificate data in chat summaries. Certificate content is used in memory for the request only.

@@ -1,6 +1,6 @@
 {
   "name": "nfse-sdk-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local MCP tools for validating, generating, signing, and issuing Brazilian NFS-e DPS documents.",
   "author": { "name": "UseInvio" },
   "skills": "../skills/",
