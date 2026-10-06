@@ -68,7 +68,6 @@ const invoice = {
   ambiente: 'restrita' as const,
   prestador: {
     cnpj: '12345678000195',
-    tpInsc: '2',
     cLocEmi: '4106902',
     serie: '1601',
     opSimpNac: '1',
@@ -86,8 +85,7 @@ const invoice = {
     dCompet: '2026-06-01',
     valores: { vServ: '1500.00' },
     tributacaoMunicipal: {
-      tribISSQN: '3',
-      cPaisResult: 'BR',
+      tribISSQN: '1',
       tpRetISSQN: '1',
     },
     tributacaoFederal: {
@@ -157,7 +155,6 @@ const client = new NfseClient({
   defaults: {
     prestador: {
       cnpj: '12345678000195',
-      tpInsc: '2',
       cLocEmi: '4106902',
       serie: '1601',
       opSimpNac: '1',
@@ -178,9 +175,13 @@ const issued = await client.invoices.create({
     tomador: {
       CPF: '00000000000',
       xNome: 'Example Customer',
+      end: {
+        endNac: { cMun: '4106902', CEP: '80010000' },
+        xLgr: 'Rua Exemplo', nro: '100', xBairro: 'Centro',
+      },
     },
     tributacaoMunicipal: {
-      tribISSQN: '3',
+      tribISSQN: '1',
       tpRetISSQN: '1',
     },
     tributacaoFederal: {
@@ -210,11 +211,32 @@ const dps = client.invoices.buildDpsJson({
   emissao: {
     nDPS: '2',
     valores: { vServ: '2500.00' },
+    tributacaoMunicipal: { tribISSQN: '1', tpRetISSQN: '1' },
+    totTrib: { pTotTribFed: '0', pTotTribEst: '0', pTotTribMun: '5' },
   },
 });
 ```
 
 ---
+
+
+### Validation and compatibility
+
+`validateDpsJsonRequest(input)` returns `valid`, `issues` (errors), `warnings` and an independent `normalizedPayload` copy. Omit optional fields or use `undefined`; empty strings, `null` and incorrect types are rejected. See [JSON mapping](JSON_MAPPING.md) for date and numeric limits.
+
+Currency discrepancies produce warnings while preserving explicit BRL and foreign amounts. All monetary XML fields use half-up rounding to two decimals, including `comExt.vServMoeda`; service amounts that round to zero are rejected. Read the validation report before issuing if your application needs to display warnings.
+
+`prepararNota` checks certificate validity before signing, and `transmitirNotaPreparada` checks it again before sending. The same check is exported as `assertCertificateValidity(pfx, now?)`. Holder matching remains an explicit `assertCertificateForProvider(pfx, taxId, now?)` call; fiscal representation is not inferred.
+
+For JSON, environment precedence is `options.ambiente` → `request.ambiente` → `restrita`, consistently for XML and transport. External XML derives its environment from `tpAmb` and rejects conflicting options. Prepared invoices must also match the environment in their signed XML.
+
+Use `client.invoices.get(accessKey, { ambiente: 'producao' })` when querying an invoice created with an environment override. Without options, queries use `defaults.ambiente` or the constructor environment. Creating an invoice never changes the client's query environment.
+
+HTTP 2xx without well-formed NFS-e XML and a consistent 50-digit access key throws `EmitirNotaError` with `INVALID_AUTHORIZATION_RESPONSE`, preserving the body, status and DPS ID. This is not proof of fiscal rejection: reconcile before resending. There are no automatic retries or verification of the returned NFS-e signature.
+
+See [behavior changes](docs/CORRECOES_EMISSAO.md) and [tested domestic/export payloads](examples/payloads.ts). Examples declare illustrative tax choices; your application selects the applicable treatment.
+
+> **3.0.0 migration:** this release has breaking validation and authorization-response changes. Read the concise [migration guide](docs/CORRECOES_EMISSAO.md) before upgrading.
 
 ## A1 Certificate
 
@@ -253,11 +275,7 @@ console.log(result.chaveAcesso);
 console.log(result.nfseXml);
 ```
 
-The XML must include an `Id` attribute on `<infDPS>`. If it does not, pass `options.dpsId` manually:
-
-```ts
-await emitirNfse(dpsXml, pfx, { dpsId: 'DPS0001', ambiente: 'restrita' });
-```
+XML must contain a valid `Id` on `<infDPS>` and `tpAmb` consistent with the destination. `options.dpsId` only selects the signature reference; it does not repair incomplete XML or bypass XSD validation.
 
 ---
 
@@ -276,7 +294,6 @@ const invoice: DpsJsonRequest = {
   ambiente: 'restrita',
   prestador: {
     cnpj: '12345678000195',
-    tpInsc: '2',
     cLocEmi: '4106902',
     serie: '1601',
     opSimpNac: '1',
@@ -294,8 +311,7 @@ const invoice: DpsJsonRequest = {
     dCompet: '2026-06-01',
     valores: { vServ: '1500.00' },
     tributacaoMunicipal: {
-      tribISSQN: '3',
-      cPaisResult: 'BR',
+      tribISSQN: '1',
       tpRetISSQN: '1',
     },
     tributacaoFederal: {
@@ -460,6 +476,8 @@ Read the full guide in [docs/METRICS.md](./docs/METRICS.md).
 
 | API | Description |
 |---|---|
+| `assertCertificateValidity(pfx, now?)` | Checks certificate validity; applied before signing and sending. |
+| `assertCertificateForProvider(pfx, taxId, now?)` | Explicitly checks validity and holder matching. |
 | `loadPfx(path, password)` | Loads an A1 certificate from a file. |
 | `loadPfxFromBuffer(buffer, password)` | Loads an A1 certificate from a buffer. |
 
@@ -469,7 +487,7 @@ Read the full guide in [docs/METRICS.md](./docs/METRICS.md).
 |---|---|
 | `signDps(xml, dpsId, pfx)` | Signs DPS XML with XMLDSIG. |
 | `signEnveloped(xml, id, ref, pfx)` | Signs generic XML such as event payloads. |
-| `verifyDps(xml)` | Verifies a DPS signature. |
+| `verifyDps(xml, certPem)` | Verifies a DPS signature. |
 | `gzipBase64(xml)` | Compresses XML with GZip and encodes it as Base64. |
 | `gunzipBase64(b64)` | Decodes and decompresses a GZip/Base64 payload. |
 | `extrairErros(body)` | Normalizes official SEFIN errors from a response body. |
@@ -481,6 +499,7 @@ Read the full guide in [docs/METRICS.md](./docs/METRICS.md).
 import type {
   Ambiente,
   CreateInvoiceInput,
+  GetInvoiceOptions,
   DpsJsonInput,
   DpsJsonRequest,
   EmitirNotaOptions,

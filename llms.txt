@@ -55,9 +55,14 @@ Keep values as strings when they represent fiscal codes, identifiers, decimals, 
 - `DEFAULT_AMBIENTE` is `restrita`; `NfseClient` also accepts `sandbox` and `production` aliases.
 - `buildDpsFromJson` validates first via `validateDpsJsonRequest`.
 - The SDK intentionally avoids silent fiscal defaults for required tax fields such as `tributacaoMunicipal` and `totTrib`.
-- `emissao.totTrib` follows an `xs:choice`: provide exactly one branch among value totals, percentage totals, `indTotTrib`, or `pTotTribSN`.
+- The JSON validator restricts `totTrib` by regime: non-Simples requires all three percentage totals; MEI requires `indTotTrib="0"`; ME/EPP requires `pTotTribSN`. Value totals remain typed but are rejected by the current regime matrix.
 - `buildDpsId` must return a 45-character Id beginning with `DPS`.
-- `emitirNfse` signs the DPS before transport and throws `EmitirNotaError` when SEFIN rejects or no authorized XML is returned.
+- `emitirNfse` checks certificate validity before signing and again before transmission. Holder matching is an explicit `assertCertificateForProvider` call, not an automatic requirement.
+- JSON environment precedence is options > request > restricted; external XML derives its environment from `tpAmb` and rejects explicit conflicts.
+- `client.invoices.get(key, { ambiente })` supports an explicit environment; otherwise defaults.ambiente > constructor. It does not remember the last emission.
+- Currency discrepancies are warnings; explicit values retain priority. Service amounts must remain positive after rounding; all foreign amounts are serialized with two decimals.
+- `validateDpsJsonRequest` returns independent normalized data, errors in `issues`, and non-blocking `warnings`.
+- `EmitirNotaError` covers SEFIN rejection and incomplete/invalid HTTP 2xx authorization responses, including missing/invalid/conflicting 50-digit access keys. Reconcile before retrying; the SDK never retries automatically.
 - `sefinClient.ts` uses PEM key/cert material for mTLS, not the raw PFX in the Node TLS handshake.
 - SEFIN latency metrics are off by default, enabled through `NFSE_SEFIN_LATENCY_METRICS`, and emitted for the external request only; keep them separate from API route latency when integrating observability.
 

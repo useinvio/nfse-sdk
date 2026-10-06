@@ -1,5 +1,7 @@
 import { DEFAULT_AMBIENTE, TP_AMB } from './config.js';
-import { assertValidDpsJsonRequest } from './fiscalValidation.js';
+import { DpsFiscalValidationError, validateDpsJsonRequest } from './fiscalValidation.js';
+import { fixedDecimal, mulDecimal } from './decimal.js';
+import { resolveValores } from './dpsNormalization.js';
 import type { Ambiente } from './config.js';
 
 const NS = 'http://www.sped.fazenda.gov.br/nfse';
@@ -184,14 +186,6 @@ export interface BuiltDps {
   xml: string;
 }
 
-function normalizeRequest(input: DpsJsonRequest | string): DpsJsonRequest {
-  const parsed = typeof input === 'string' ? JSON.parse(input) : input;
-  if (!parsed?.prestador) throw new Error('JSON da DPS deve informar prestador');
-  if (!parsed?.servico) throw new Error('JSON da DPS deve informar servico');
-  if (!parsed?.emissao) throw new Error('JSON da DPS deve informar emissao');
-  return parsed;
-}
-
 function escapeXml(value: string | number): string {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -233,34 +227,9 @@ function pad(value: string, length: number): string {
   return onlyDigits(value).padStart(length, '0');
 }
 
-function decimalParts(value: string | number): { integer: bigint; scale: number } {
-  const text = String(value);
-  if (!/^\d+(?:\.\d+)?$/.test(text)) throw new Error(`Decimal invalido: ${text}`);
-  const [whole, fraction = ''] = text.split('.');
-  return { integer: BigInt(`${whole}${fraction}`), scale: fraction.length };
-}
-
-function fixedFromInteger(integer: bigint, scale: number, decimals = 2): string {
-  const divisor = 10n ** BigInt(Math.max(0, scale - decimals));
-  const scaled = scale > decimals ? (integer + divisor / 2n) / divisor : integer * 10n ** BigInt(decimals - scale);
-  const text = scaled.toString().padStart(decimals + 1, '0');
-  return `${text.slice(0, -decimals)}.${text.slice(-decimals)}`;
-}
-
-function fixedDecimal(value: string | number, decimals = 2): string {
-  const { integer, scale } = decimalParts(value);
-  return fixedFromInteger(integer, scale, decimals);
-}
-
-function roundMoney(value: string | number): string { return fixedDecimal(value); }
-function roundRate(value: string | number): string { return fixedDecimal(value); }
-function roundTaxBurdenRate(value: string | number): string { return fixedDecimal(value); }
-
-function mulDecimal(a: string, b: number): string {
-  const left = decimalParts(a);
-  const right = decimalParts(b);
-  return fixedFromInteger(left.integer * right.integer, left.scale + right.scale, 2);
-}
+const roundMoney = fixedDecimal;
+const roundRate = fixedDecimal;
+const roundTaxBurdenRate = fixedDecimal;
 
 function nowSaoPauloOffset(date = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -271,12 +240,9 @@ function nowSaoPauloOffset(date = new Date()): string {
 }
 
 function resolveVServ(input: DpsJsonInput): string {
-  const values = input.valores;
-  const vServ = values?.vServ ?? input.vServ;
+  const { vServ, vServMoeda, cotacao } = resolveValores(input);
   if (vServ) return roundMoney(vServ);
 
-  const vServMoeda = values?.vServMoeda ?? input.vServMoeda;
-  const cotacao = values?.cotacao ?? input.cotacao;
   if (!vServMoeda || !cotacao) {
     throw new Error('Informe valores.vServ ou (valores.vServMoeda + valores.cotacao) no JSON da DPS.');
   }
@@ -284,7 +250,7 @@ function resolveVServ(input: DpsJsonInput): string {
 }
 
 function resolveVServMoeda(input: DpsJsonInput): string {
-  return input.valores?.vServMoeda ?? input.vServMoeda ?? '0.00';
+  return resolveValores(input).vServMoeda ?? '0.00';
 }
 
 export function buildDpsId(prestador: PrestadorProfile, nDPS: string, serie = prestador.serie): string {
@@ -463,7 +429,7 @@ function buildComExt(input: DpsJsonInput, comExt: Partial<ComExt>): string {
       textEl('mdPrestacao', comExt.mdPrestacao),
       textEl('vincPrest', comExt.vincPrest),
       textEl('tpMoeda', comExt.tpMoeda),
-      requiredTextEl('vServMoeda', comExt.vServMoeda ?? resolveVServMoeda(input)),
+      requiredTextEl('vServMoeda', roundMoney(comExt.vServMoeda ?? resolveVServMoeda(input))),
       textEl('mecAFComexP', comExt.mecAFComexP),
       textEl('mecAFComexT', comExt.mecAFComexT),
       textEl('movTempBens', comExt.movTempBens),
@@ -473,8 +439,10 @@ function buildComExt(input: DpsJsonInput, comExt: Partial<ComExt>): string {
 }
 
 export function buildDpsFromJson(input: DpsJsonRequest | string): BuiltDps {
-  const request = normalizeRequest(input);
-  assertValidDpsJsonRequest(request);
+  const parsed = typeof input === 'string' ? JSON.parse(input) : input;
+  const report = validateDpsJsonRequest(parsed as DpsJsonRequest);
+  if (!report.valid) throw new DpsFiscalValidationError(report);
+  const request = report.normalizedPayload;
   const ambiente = request.ambiente ?? DEFAULT_AMBIENTE;
   const { prestador, servico } = request;
   const emissao = request.emissao;
@@ -512,7 +480,7 @@ export function buildDpsFromJson(input: DpsJsonRequest | string): BuiltDps {
       el('locPrest', requiredTextEl('cLocPrestacao', serviceOverride?.cLocPrestacao ?? servico.cLocPrestacao)),
       cServ,
       comExt ? buildComExt(emissao, comExt) : '',
-      emissao.obra ? el('obra', textEl('cObra', emissao.obra.cObra) + textEl('inscImobFisc', emissao.obra.inscImobFisc) + textEl('cCM', emissao.obra.cCM)) : '',
+      emissao.obra ? el('obra', textEl('inscImobFisc', emissao.obra.inscImobFisc) + requiredTextEl('cObra', emissao.obra.cObra)) : '',
       emissao.evento ? el('atvEvento', textEl('xDesc', emissao.evento.xDesc) + textEl('dtEvento', emissao.evento.dtEvento)) : '',
     ].join(''),
   );

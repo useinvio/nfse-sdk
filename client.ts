@@ -23,6 +23,10 @@ export interface NfseClientDpsDefaults {
 
 export type CreateInvoiceInput = NfseClientDpsDefaults;
 
+export interface GetInvoiceOptions {
+  ambiente?: Ambiente;
+}
+
 export interface NfseClientOptions {
   environment?: NfseEnvironment;
   certificate: NfseCertificateInput | PfxMaterial;
@@ -32,7 +36,7 @@ export interface NfseClientOptions {
 export interface InvoiceResource {
   create(input: CreateInvoiceInput): Promise<ResultadoEmissaoNota>;
   buildDpsJson(input: CreateInvoiceInput): DpsJsonRequest;
-  get(chaveAcesso: string): Promise<SefinResposta>;
+  get(chaveAcesso: string, options?: GetInvoiceOptions): Promise<SefinResposta>;
 }
 
 function resolveEnvironment(environment: NfseEnvironment | undefined): Ambiente {
@@ -81,7 +85,7 @@ export class NfseClient {
     this.invoices = {
       create: (input) => this.createInvoice(input),
       buildDpsJson: (input) => this.buildInvoiceDpsJson(input),
-      get: (chaveAcesso) => this.getInvoice(chaveAcesso),
+      get: (chaveAcesso, options) => this.getInvoice(chaveAcesso, options),
     };
   }
 
@@ -112,7 +116,7 @@ export class NfseClient {
     return emitirNfse(dpsJson, this.pfx, { ambiente: dpsJson.ambiente });
   }
 
-  private async getInvoice(chaveAcesso: string): Promise<SefinResposta> {
-    return consultarNfse(chaveAcesso, this.pfx, this.ambiente);
+  private async getInvoice(chaveAcesso: string, options: GetInvoiceOptions = {}): Promise<SefinResposta> {
+    return consultarNfse(chaveAcesso, this.pfx, options.ambiente ?? this.defaults.ambiente ?? this.ambiente);
   }
 }

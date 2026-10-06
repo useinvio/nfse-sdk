@@ -69,6 +69,7 @@ export type { EmitirNotaOptions, NotaInput, NotaPreparada, ResultadoEmissaoNota 
 export { NfseClient } from './client.js';
 export type {
   CreateInvoiceInput,
+  GetInvoiceOptions,
   InvoiceResource,
   NfseCertificateInput,
   NfseClientDpsDefaults,
@@ -85,4 +86,4 @@ export { DpsXsdValidationError, XmllintUnavailableError, validateDpsXmlAgainstXs
 export { loadPfxFromBuffer, loadPfx } from './loadPfx.js';
 export type { PfxMaterial } from './loadPfx.js';
 
-export { assertCertificateForProvider, CertificateValidationError } from './certificateValidation.js';
+export { assertCertificateValidity, assertCertificateForProvider, CertificateValidationError } from './certificateValidation.js';
