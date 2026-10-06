@@ -238,6 +238,10 @@ See [behavior changes](docs/CORRECOES_EMISSAO.md) and [tested domestic/export pa
 
 > **3.0.0 migration:** this release has breaking validation and authorization-response changes. Read the concise [migration guide](docs/CORRECOES_EMISSAO.md) before upgrading.
 
+### Local MCP plugin
+
+The [NFS-e SDK MCP](plugins/nfse-sdk-mcp/README.md) plugin validates JSON/XML and builds DPS without a certificate. When a user supplies a base64 A1/PFX and password to a call, it can also prepare, sign, and transmit an NFS-e. It runs locally and never writes the certificate; see the plugin documentation for setup and limits.
+
 ## A1 Certificate
 
 ### From a file

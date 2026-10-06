@@ -247,6 +247,10 @@ Veja [as correcoes e mudancas de comportamento](docs/CORRECOES_EMISSAO.md) e os 
 
 > **Migracao para 3.0.0:** esta versao tem breaking changes de validacao e resposta de autorizacao. Leia o guia curto em [CORRECOES_EMISSAO.md](docs/CORRECOES_EMISSAO.md) antes de atualizar.
 
+### Plugin MCP local
+
+O plugin [NFS-e SDK MCP](plugins/nfse-sdk-mcp/README.md) fornece ferramentas para validar JSON/XML e gerar DPS sem certificado. Quando o usuario fornece um A1/PFX em base64 e a senha na chamada, tambem pode preparar, assinar e transmitir uma NFS-e. Ele executa localmente e nunca grava o certificado; veja a documentacao do plugin para instalacao e limites.
+
 ## Certificado A1
 
 ### A partir de arquivo

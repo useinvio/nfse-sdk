@@ -1,0 +1,20 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "nfse-sdk-mcp",
+  "version": "0.1.0",
+  "description": "Local MCP tools for validating, generating, signing, and issuing Brazilian NFS-e DPS documents.",
+  "author": { "name": "UseInvio" },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "NFS-e SDK",
+        "shortDescription": "Emit and validate NFS-e",
+        "longDescription": "Use local NFS-e SDK tools to validate DPS JSON/XML, generate DPS XML, and optionally sign or transmit a note with an in-memory A1 certificate.",
+        "developerName": "UseInvio",
+        "category": "Developer tools",
+        "capabilities": ["MCP"],
+        "defaultPrompt": "Validate this DPS payload and generate XML if it is valid."
+      }
+    }
+  }
+}
