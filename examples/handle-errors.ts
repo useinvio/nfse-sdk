@@ -1,4 +1,5 @@
 import { EmitirNotaError, emitirNfse, loadPfx, type DpsJsonRequest } from '@useinvio/nfse-sdk';
+import { nationalInvoice } from './payloads.js';
 
 async function emitWithStructuredErrors(nota: DpsJsonRequest) {
   const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
@@ -9,7 +10,7 @@ async function emitWithStructuredErrors(nota: DpsJsonRequest) {
     if (!(error instanceof EmitirNotaError)) throw error;
 
     return {
-      rejected: true,
+      failed: true, // Includes incomplete HTTP 2xx responses; reconcile before retrying.
       status: error.status,
       dpsId: error.dpsId,
       errors: error.erros.map((rejeicao) => ({
@@ -21,4 +22,4 @@ async function emitWithStructuredErrors(nota: DpsJsonRequest) {
   }
 }
 
-void emitWithStructuredErrors({} as DpsJsonRequest);
+void emitWithStructuredErrors(nationalInvoice);

@@ -11,8 +11,8 @@ export class CertificateValidationError extends Error {
   }
 }
 
-/** Final certificate validity and holder check performed immediately before transmission. */
-export function assertCertificateForProvider(pfx: PfxMaterial, providerTaxId: string, now = new Date()): void {
+/** Validity is checked at signing time and again immediately before transmission. */
+export function assertCertificateValidity(pfx: PfxMaterial, now = new Date()): void {
   const certificate = forge.pki.certificateFromPem(pfx.certPem);
   if (now < certificate.validity.notBefore) {
     throw new CertificateValidationError('CERTIFICATE_NOT_YET_VALID', 'O certificado digital ainda nao esta vigente.');
@@ -20,7 +20,12 @@ export function assertCertificateForProvider(pfx: PfxMaterial, providerTaxId: st
   if (now >= certificate.validity.notAfter) {
     throw new CertificateValidationError('CERTIFICATE_EXPIRED', 'O certificado digital esta expirado.');
   }
+}
 
+/** Explicit holder check; does not resolve fiscal representation/authorization. */
+export function assertCertificateForProvider(pfx: PfxMaterial, providerTaxId: string, now = new Date()): void {
+  assertCertificateValidity(pfx, now);
+  const certificate = forge.pki.certificateFromPem(pfx.certPem);
   const expected = providerTaxId.replace(/\D/g, '');
   const subjectText = certificate.subject.attributes.map((attribute) => String(attribute.value)).join(' ');
   const derText = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();

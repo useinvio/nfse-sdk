@@ -33,8 +33,9 @@ type DpsJsonRequest = {
 
 | Campo | Obrigatorio | Tipo | Descricao |
 | --- | --- | --- | --- |
-| `cnpj` | Sim | `string` | CNPJ do prestador. O SDK remove nao digitos e completa com zeros a esquerda ao montar o `Id` da DPS. |
-| `tpInsc` | Nao | `'1' \| '2' \| string` | Tipo de inscricao no `Id` da DPS. `1` = CPF, `2` = CNPJ. Quando ausente, usa `2`. |
+| `cnpj` | Alternativa a `cpf` | `string` | CNPJ com exatamente 14 digitos, sem pontuacao. Informe exatamente um identificador. |
+| `cpf` | Alternativa a `cnpj` | `string` | CPF com exatamente 11 digitos, sem pontuacao. |
+| `tpInsc` | Nao | `'1' \| '2' \| string` | Legado ignorado. O SDK deriva o tipo do documento: `1` = CPF, `2` = CNPJ. |
 | `cLocEmi` | Sim | `string` | Codigo IBGE do municipio de emissao. |
 | `serie` | Sim | `string` | Serie padrao da DPS. Pode ser sobrescrita por `emissao.serie`. |
 | `opSimpNac` | Sim | `string` | Opcao pelo Simples Nacional, serializada em `prest/regTrib/opSimpNac`. |
@@ -58,7 +59,7 @@ type DpsJsonRequest = {
 | `serie` | Nao | `string` | Serie desta DPS. Quando informado, sobrescreve `prestador.serie` apenas nesta emissao. |
 | `dhEmi` | Nao | `string` | Data e hora da emissao em ISO com offset, por exemplo `2026-06-15T10:30:00-03:00`. Quando ausente, usa a data/hora atual. |
 | `dCompet` | Nao | `string` | Data de competencia no formato `YYYY-MM-DD`. Quando ausente, usa a data de `dhEmi`. |
-| `valores` | Condicional | `Valores` | Valores do servico, descontos e deducoes. Para calcular `vServ`, informe `valores.vServ` ou `valores.vServMoeda` + `valores.cotacao`. |
+| `valores` | Condicional | `Valores` | Valores do servico. Descontos e deducoes ainda nao sao suportados. Para calcular `vServ`, informe `valores.vServ` ou `valores.vServMoeda` + `valores.cotacao`. |
 | `vServ` | Condicional | `string` | Atalho legado para o valor do servico. Usado quando `valores.vServ` nao foi informado. |
 | `vServMoeda` | Condicional | `string` | Atalho legado para valor em moeda estrangeira. Usado com `cotacao` quando `vServ` nao foi informado. |
 | `cotacao` | Condicional | `number` | Atalho legado para cotacao. Usado com `vServMoeda` quando `vServ` nao foi informado. |
@@ -88,7 +89,11 @@ type DpsJsonRequest = {
 Regra condicional: para gerar a DPS, o SDK precisa obter `vServ`. Informe
 `valores.vServ` ou informe o par `valores.vServMoeda` + `valores.cotacao`.
 Os atalhos `emissao.vServ`, `emissao.vServMoeda` e `emissao.cotacao` tambem sao
-aceitos, mas o formato com `valores` e preferencial.
+aceitos. A resolucao e por campo: `valores` prevalece sobre o atalho correspondente, permitindo entradas mistas. A mesma resolucao e usada na validacao e no XML.
+
+No modelo atual, nacional exige reais e proibe moeda/cotacao. Exportacao exige comercio exterior, valor estrangeiro e cotacao, mesmo quando ha `vServ` explicito. Informar somente o valor no bloco `comercioExterior` nao satisfaz essa exigencia.
+
+`vServ` explicito prevalece sobre a conversao. O valor estrangeiro do bloco `comercioExterior` prevalece na tag `comExt/vServMoeda`. Divergencias geram `CURRENCY_BRL_MISMATCH` e `CURRENCY_FOREIGN_MISMATCH` em `warnings`, comparadas em centavos, sem bloquear a emissao. A multiplicacao preserva a precisao original; a serializacao arredonda metade para cima em duas casas, inclusive `comExt.vServMoeda`. Valores de servico que arredondam para zero ou excedem 15 digitos inteiros sao rejeitados.
 
 ## `emissao.servico`
 
@@ -107,12 +112,12 @@ aceitos, mas o formato com `valores` e preferencial.
 | `NIF` | Nao | `string` | Numero de identificacao fiscal estrangeiro. |
 | `cNaoNIF` | Nao | `string` | Motivo/codigo de nao informacao do NIF. |
 | `xNome` | Sim, se `tomador` existir | `string` | Nome ou razao social do tomador. |
-| `end` | Nao | `Endereco` | Endereco. Veja `Endereco` abaixo. |
+| `end` | Sim, se `tomador` existir | `Endereco` | Endereco. Veja `Endereco` abaixo. |
 | `fone` | Nao | `string` | Telefone. |
 | `email` | Nao | `string` | Email. |
 
 Quando `tomador` for informado, use exatamente um identificador entre `CNPJ`,
-`CPF`, `NIF` e `cNaoNIF`.
+`CPF`, `NIF` e `cNaoNIF`. Nacional exige CPF/CNPJ e `endNac`; exterior exige NIF ou `cNaoNIF` (`1`/`2`) e `endExt`. Omitir todo o tomador continua permitido localmente.
 
 ### `Endereco`
 
@@ -176,7 +181,7 @@ Regras adicionais:
 | `pAliqCofins` | Nao | `string` | Aliquota de COFINS. Serializada com duas casas decimais. |
 | `vPis` | Nao | `string` | Valor de PIS. Serializado com duas casas decimais. |
 | `vCofins` | Nao | `string` | Valor de COFINS. Serializado com duas casas decimais. |
-| `tpRetPisCofins` | Nao | `string` | Tipo de retencao de PIS/COFINS. |
+| `tpRetPisCofins` | Nao | `string` | Tipo de retencao de PIS/COFINS, codigo de `0` a `9`. |
 
 ## `tribNac`
 
@@ -203,8 +208,8 @@ ainda nao implementa esse bloco.
 
 | Campo | Obrigatorio | Tipo | Descricao |
 | --- | --- | --- | --- |
-| `cObra` | Nao | `string` | Codigo da obra. |
-| `inscImobFisc` | Nao | `string` | Inscricao imobiliaria fiscal. |
+| `cObra` | Sim, se `obra` existir | `string` | Codigo da obra, 1 a 30 caracteres. |
+| `inscImobFisc` | Nao | `string` | Inscricao imobiliaria fiscal, 1 a 30 caracteres; serializada antes de `cObra`. |
 | `cCM` | Nao suportado | `string` | Campo legado bloqueado por validacao; nao existe como filho de `obra` no XSD v1.01. |
 
 ## `evento`
@@ -216,8 +221,7 @@ ainda nao implementa esse bloco.
 
 ## `totTrib`
 
-`totTrib` e um `xs:choice` no XSD: informe exatamente **um** dos quatro grupos
-abaixo. A SDK rejeita zero ou mais de um grupo preenchido.
+`totTrib` e um `xs:choice` no XSD. O validador JSON atual restringe a modalidade por regime: nao optante (`1`) exige os tres `pTotTribFed/Est/Mun`; MEI (`2`) exige somente `indTotTrib="0"`; ME/EPP (`3`) exige somente `pTotTribSN`. Misturas e grupos incompletos sao rejeitados.
 
 | Campo | Obrigatorio | Tipo | Descricao |
 | --- | --- | --- | --- |
@@ -227,19 +231,28 @@ abaixo. A SDK rejeita zero ou mais de um grupo preenchido.
 | `pTotTribFed` | Condicional | `string` | Percentual aproximado de tributos federais. Serializado com duas casas decimais. |
 | `pTotTribEst` | Condicional | `string` | Percentual aproximado de tributos estaduais. Serializado com duas casas decimais. |
 | `pTotTribMun` | Condicional | `string` | Percentual aproximado de tributos municipais. Serializado com duas casas decimais. |
-| `pTotTribSN` | Condicional | `string` | Percentual aproximado de tributos no Simples Nacional. Nao informe quando `prestador.opSimpNac = "1"`. |
-| `indTotTrib` | Condicional | `string` | Indicador oficial para nao informar valor estimado. Use `0` quando nao houver estimativa aproximada. |
+| `pTotTribSN` | Condicional | `string` | Percentual aproximado de tributos no Simples Nacional. Use somente quando `prestador.opSimpNac = "3"`. |
+| `indTotTrib` | Condicional | `string` | Indicador oficial para nao informar valor estimado. Use `0` somente para MEI no modelo JSON atual. |
 
-Informe ao menos uma forma de totalizacao: grupo `vTotTrib*` (Fed+Est+Mun),
-grupo `pTotTrib*` (Fed+Est+Mun), `pTotTribSN` ou `indTotTrib=0`. Ao escolher o
-grupo `vTotTrib*` ou `pTotTrib*`, os tres campos (Fed/Est/Mun) sao obrigatorios.
+Os campos `vTotTrib*` permanecem tipados por compatibilidade, mas nenhum dos regimes aceitos permite essa modalidade no JSON atual.
 
 ## Regras de formatacao
 
 - Valores monetarios sao serializados com duas casas decimais.
 - Aliquotas (`pAliq`, `pAliqPis`, `pAliqCofins`) sao serializadas com duas casas decimais.
 - Percentuais de carga tributaria em `totTrib` sao serializados com duas casas decimais.
-- Campos vazios, `undefined` ou `null` nao geram tags XML opcionais.
+- Campos opcionais ausentes ou `undefined` sao omitidos; `null`, strings vazias e tipos incorretos sao rejeitados antecipadamente.
 - Campos obrigatorios ausentes geram erro antes da DPS ser retornada.
 - `comercioExterior` tem prioridade sobre `comExt` quando os dois forem informados.
 - O XML gerado nos testes e validado contra `schemas/nfse/v1.01/Schemas/1.01/DPS_v1.01.xsd`.
+
+
+## Relatorio e limites estruturais
+
+`validateDpsJsonRequest` retorna `issues` com erros e `warnings` com avisos; somente erros tornam `valid=false`. `normalizedPayload` e uma copia independente com os valores e o alias de comercio exterior resolvidos, mantendo os campos legados. Estruturas invalidas retornam `INVALID_STRUCTURE`, sem acessos que lancem `TypeError`.
+
+`dhEmi` exige data de calendario valida entre 2000 e 2099, segundos sem fracao e offset de horas inteiras de -11:00 a +12:00; `Z` nao e aceito pelo leiaute local. `dCompet` exige data valida no mesmo intervalo de anos. Nao se impoe relacao fiscal entre as datas.
+
+Limites apos arredondamento: valores monetarios, 15 digitos inteiros; ISS, 1; aliquotas PIS/COFINS e `pTotTribSN`, 2; `pTotTribFed/Est/Mun`, 3. Esses limites sao estruturais, nao autorizacao fiscal de aliquotas. Retencoes federais podem ser zero, mas nao negativas.
+
+Dominios de comercio exterior: `mdPrestacao` 0–4; `vincPrest` 0–6 ou 9; `tpMoeda` tres digitos; `mecAFComexP` 00–08; `mecAFComexT` 00–26; `movTempBens` 0–3; `mdic` 0–1. Nao se consultam catalogos externos. Os dois aliases de comercio exterior nao sao combinados.

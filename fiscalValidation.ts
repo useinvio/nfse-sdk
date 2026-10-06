@@ -1,3 +1,5 @@
+import { decimalParts, fixedDecimal, mulDecimal } from './decimal.js';
+import { clonePayload, normalizeDpsRequest, resolveValores, structuralIssues } from './dpsNormalization.js';
 import type { DpsJsonInput, DpsJsonRequest, PrestadorProfile, ServicoProfile, TribMun } from './dpsJson.js';
 
 const OP_SIMP_NAC = new Set(['1', '2', '3']);
@@ -177,7 +179,7 @@ function assertEnum(issues: string[], field: string, value: string | undefined, 
 }
 
 function assertDecimal(issues: string[], field: string, value: string | number | undefined): void {
-  if (value === undefined || value === '') return;
+  if (value === undefined) return;
   if (!/^\d+(?:\.\d+)?$/.test(String(value))) {
     issue(issues, `${field} deve ser decimal positivo, sem notacao exponencial`);
   }
@@ -264,33 +266,46 @@ function validatePessoa(
   }
 }
 
+function validDate(value: string): boolean {
+  const parts = value.match(/^(20\d{2})-(\d{2})-(\d{2})$/);
+  if (!parts) return false;
+  const parsed = new Date(Date.UTC(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])));
+  return parsed.getUTCFullYear() === Number(parts[1]) && parsed.getUTCMonth() === Number(parts[2]) - 1 && parsed.getUTCDate() === Number(parts[3]);
+}
+
 function validateDates(issues: string[], emissao: DpsJsonInput): void {
-  if (emissao.dhEmi !== undefined && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?[+-]\d{2}:\d{2}$/.test(emissao.dhEmi)) {
-    issue(issues, 'emissao.dhEmi deve seguir YYYY-MM-DDThh:mm:ss-03:00');
-  }
-  if (emissao.dCompet !== undefined) {
-    const parts = emissao.dCompet.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    const parsed = parts ? new Date(Date.UTC(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]))) : null;
-    if (!parts || !parsed || parsed.getUTCFullYear() !== Number(parts[1]) || parsed.getUTCMonth() !== Number(parts[2]) - 1 || parsed.getUTCDate() !== Number(parts[3])) {
-      issue(issues, 'emissao.dCompet deve ser uma data valida no formato YYYY-MM-DD');
-    }
+  if (emissao.dhEmi !== undefined && (
+    !/^20\d{2}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:[+-](?:0\d|1[01]):00|\+12:00)$/.test(emissao.dhEmi) ||
+    !validDate(emissao.dhEmi.slice(0, 10))
+  )) issue(issues, 'emissao.dhEmi deve seguir data/hora valida YYYY-MM-DDThh:mm:ss-03:00 conforme XSD 1.01');
+  if (emissao.dCompet !== undefined && !validDate(emissao.dCompet)) {
+    issue(issues, 'emissao.dCompet deve ser uma data valida no formato YYYY-MM-DD');
   }
 }
 
+function validDecimal(value: string | number | undefined): value is string | number {
+  return value !== undefined && /^\d+(?:\.\d+)?$/.test(String(value));
+}
+
+function validateDecimalOutput(issues: string[], path: string, value: string | undefined, digits = 15, positive = false): void {
+  assertDecimal(issues, path, value);
+  if (!validDecimal(value)) return;
+  const rounded = fixedDecimal(value);
+  if (rounded.split('.')[0].length > digits) issue(issues, `${path} excede ${digits} digitos inteiros apos arredondamento`);
+  if (positive && rounded === '0.00') issue(issues, `${path} deve ser maior que zero apos arredondamento`);
+}
+
 function validateValores(issues: string[], emissao: DpsJsonInput): void {
-  const vServ = emissao.valores?.vServ ?? emissao.vServ;
-  const vServMoeda = emissao.valores?.vServMoeda ?? emissao.vServMoeda;
-  const cotacao = emissao.valores?.cotacao ?? emissao.cotacao;
+  const { vServ, vServMoeda, cotacao } = resolveValores(emissao);
   if (vServ === undefined && (vServMoeda === undefined || cotacao === undefined)) {
     issue(issues, 'emissao.valores.vServ e obrigatorio, ou informe valores.vServMoeda e valores.cotacao');
   }
-  for (const [path, value] of [
-    ['emissao.valores.vServ', vServ],
-    ['emissao.valores.vServMoeda', vServMoeda],
-    ['emissao.valores.cotacao', cotacao],
-  ] as const) {
-    assertDecimal(issues, path, value);
-    if (value !== undefined && Number.isFinite(Number(value)) && Number(value) <= 0) issue(issues, `${path} deve ser maior que zero`);
+  validateDecimalOutput(issues, 'emissao.valores.vServ', vServ, 15, true);
+  validateDecimalOutput(issues, 'emissao.valores.vServMoeda', vServMoeda, 15, true);
+  assertDecimal(issues, 'emissao.valores.cotacao', cotacao);
+  if (validDecimal(cotacao) && decimalParts(cotacao).integer === 0n) issue(issues, 'emissao.valores.cotacao deve ser maior que zero');
+  if (vServ === undefined && validDecimal(vServMoeda) && validDecimal(cotacao)) {
+    validateDecimalOutput(issues, 'emissao.valores.vServ', mulDecimal(vServMoeda, cotacao), 15, true);
   }
 }
 
@@ -319,7 +334,7 @@ function validateTribMun(issues: string[], trib: TribMun | undefined, opSimpNac:
     issue(issues, 'emissao.tributacaoMunicipal.pAliq nao deve ser informado quando prestador.opSimpNac = 1');
   }
 
-  assertDecimal(issues, 'emissao.tributacaoMunicipal.pAliq', trib.pAliq);
+  validateDecimalOutput(issues, 'emissao.tributacaoMunicipal.pAliq', trib.pAliq, 1);
   if (trib.pAliq !== undefined && Number.isFinite(Number(trib.pAliq)) && Number(trib.pAliq) > 9.99) {
     issue(issues, 'emissao.tributacaoMunicipal.pAliq deve ser <= 9.99 (TSDec1V2: um digito inteiro, duas casas decimais)');
   }
@@ -372,13 +387,13 @@ function validateTotTrib(issues: string[], emissao: DpsJsonInput, opSimpNac: str
     issue(issues, 'emissao.totTrib para ME/EPP exige somente pTotTribSN');
   }
 
-  assertDecimal(issues, 'emissao.totTrib.vTotTribFed', tot.vTotTribFed);
-  assertDecimal(issues, 'emissao.totTrib.vTotTribEst', tot.vTotTribEst);
-  assertDecimal(issues, 'emissao.totTrib.vTotTribMun', tot.vTotTribMun);
-  assertDecimal(issues, 'emissao.totTrib.pTotTribFed', tot.pTotTribFed);
-  assertDecimal(issues, 'emissao.totTrib.pTotTribEst', tot.pTotTribEst);
-  assertDecimal(issues, 'emissao.totTrib.pTotTribMun', tot.pTotTribMun);
-  assertDecimal(issues, 'emissao.totTrib.pTotTribSN', tot.pTotTribSN);
+  validateDecimalOutput(issues, 'emissao.totTrib.vTotTribFed', tot.vTotTribFed, 15);
+  validateDecimalOutput(issues, 'emissao.totTrib.vTotTribEst', tot.vTotTribEst, 15);
+  validateDecimalOutput(issues, 'emissao.totTrib.vTotTribMun', tot.vTotTribMun, 15);
+  validateDecimalOutput(issues, 'emissao.totTrib.pTotTribFed', tot.pTotTribFed, 3);
+  validateDecimalOutput(issues, 'emissao.totTrib.pTotTribEst', tot.pTotTribEst, 3);
+  validateDecimalOutput(issues, 'emissao.totTrib.pTotTribMun', tot.pTotTribMun, 3);
+  validateDecimalOutput(issues, 'emissao.totTrib.pTotTribSN', tot.pTotTribSN, 2);
 }
 
 function validateUnsupportedShapes(issues: string[], emissao: DpsJsonInput): void {
@@ -388,7 +403,7 @@ function validateUnsupportedShapes(issues: string[], emissao: DpsJsonInput): voi
   if (emissao.evento) {
     issue(issues, 'emissao.evento ainda nao e suportado; o layout v1.01 exige xNome, dtIni, dtFim e id/endereco');
   }
-  if (emissao.obra?.cCM) {
+  if (emissao.obra?.cCM !== undefined) {
     issue(issues, 'emissao.obra.cCM nao existe no layout v1.01; use cObra/inscImobFisc ou aguarde suporte a cCIB/endereco');
   }
   if (emissao.valores?.vDesc !== undefined || emissao.valores?.vDedRed !== undefined) {
@@ -399,16 +414,32 @@ function validateUnsupportedShapes(issues: string[], emissao: DpsJsonInput): voi
 function validateComercioExterior(issues: string[], emissao: DpsJsonInput): void {
   const comExt = emissao.comercioExterior ?? emissao.comExt;
   if (!comExt) return;
-
-  for (const field of ['mdPrestacao', 'vincPrest', 'tpMoeda', 'mecAFComexP', 'mecAFComexT', 'movTempBens', 'mdic'] as const) {
-    if (!comExt[field]) issue(issues, `emissao.comercioExterior.${field} e obrigatorio quando comercioExterior for informado`);
+  const domains = {
+    mdPrestacao: ['0', '1', '2', '3', '4'],
+    vincPrest: ['0', '1', '2', '3', '4', '5', '6', '9'],
+    mecAFComexP: Array.from({ length: 9 }, (_, i) => String(i).padStart(2, '0')),
+    mecAFComexT: Array.from({ length: 27 }, (_, i) => String(i).padStart(2, '0')),
+    movTempBens: ['0', '1', '2', '3'],
+    mdic: ['0', '1'],
+  };
+  for (const field of Object.keys(domains) as Array<keyof typeof domains>) {
+    assertEnum(issues, `emissao.comercioExterior.${field}`, comExt[field], new Set(domains[field]));
   }
-  assertDecimal(issues, 'emissao.comercioExterior.vServMoeda', comExt.vServMoeda ?? emissao.valores?.vServMoeda ?? emissao.vServMoeda);
+  assertPattern(issues, 'emissao.comercioExterior.tpMoeda', comExt.tpMoeda, /^\d{3}$/, '3 digitos numericos');
+  validateDecimalOutput(issues, 'emissao.comercioExterior.vServMoeda', comExt.vServMoeda ?? resolveValores(emissao).vServMoeda, 15, true);
+}
+
+function validateObra(issues: string[], emissao: DpsJsonInput): void {
+  if (!emissao.obra) return;
+  assertPattern(issues, 'emissao.obra.cObra', emissao.obra.cObra, /^[\s\S]{1,30}$/, '1 a 30 caracteres');
+  if (emissao.obra.inscImobFisc !== undefined) {
+    assertPattern(issues, 'emissao.obra.inscImobFisc', emissao.obra.inscImobFisc, /^[\s\S]{1,30}$/, '1 a 30 caracteres');
+  }
 }
 
 function validateOperationMatrix(issues: string[], emissao: DpsJsonInput): void {
   const isExport = Boolean(emissao.comercioExterior ?? emissao.comExt);
-  const valores = emissao.valores ?? emissao;
+  const valores = resolveValores(emissao);
   const tomador = emissao.tomador;
   const end = tomador?.end;
   if (!isExport) {
@@ -430,14 +461,21 @@ function validateOperationMatrix(issues: string[], emissao: DpsJsonInput): void 
 }
 
 function validateTribFed(issues: string[], emissao: DpsJsonInput): void {
-  const piscofins = emissao.tributacaoFederal?.piscofins;
+  const trib = emissao.tributacaoFederal;
+  for (const key of ['vRetCP', 'vRetIRRF', 'vRetCSLL'] as const) {
+    validateDecimalOutput(issues, `emissao.tributacaoFederal.${key}`, trib?.[key]);
+  }
+  const piscofins = trib?.piscofins;
   if (!piscofins) return;
+  if (piscofins.tpRetPisCofins !== undefined) {
+    assertEnum(issues, 'emissao.tributacaoFederal.piscofins.tpRetPisCofins', piscofins.tpRetPisCofins, new Set(Array.from({ length: 10 }, (_, i) => String(i))));
+  }
   assertEnum(issues, 'emissao.tributacaoFederal.piscofins.CST', piscofins.CST, PIS_COFINS_CST);
-  assertDecimal(issues, 'emissao.tributacaoFederal.piscofins.vBCPisCofins', piscofins.vBCPisCofins);
-  assertDecimal(issues, 'emissao.tributacaoFederal.piscofins.pAliqPis', piscofins.pAliqPis);
-  assertDecimal(issues, 'emissao.tributacaoFederal.piscofins.pAliqCofins', piscofins.pAliqCofins);
-  assertDecimal(issues, 'emissao.tributacaoFederal.piscofins.vPis', piscofins.vPis);
-  assertDecimal(issues, 'emissao.tributacaoFederal.piscofins.vCofins', piscofins.vCofins);
+  validateDecimalOutput(issues, 'emissao.tributacaoFederal.piscofins.vBCPisCofins', piscofins.vBCPisCofins, 15);
+  validateDecimalOutput(issues, 'emissao.tributacaoFederal.piscofins.pAliqPis', piscofins.pAliqPis, 2);
+  validateDecimalOutput(issues, 'emissao.tributacaoFederal.piscofins.pAliqCofins', piscofins.pAliqCofins, 2);
+  validateDecimalOutput(issues, 'emissao.tributacaoFederal.piscofins.vPis', piscofins.vPis, 15);
+  validateDecimalOutput(issues, 'emissao.tributacaoFederal.piscofins.vCofins', piscofins.vCofins, 15);
 }
 
 function collectDpsValidationIssues(request: DpsJsonRequest): string[] {
@@ -455,6 +493,11 @@ function collectDpsValidationIssues(request: DpsJsonRequest): string[] {
   validateValores(issues, request.emissao);
   validatePessoa(issues, 'emissao.tomador', request.emissao.tomador);
   validatePessoa(issues, 'emissao.intermediario', request.emissao.intermediario);
+  const intermediary = request.emissao.intermediario as { NIF?: string; cNaoNIF?: string } | undefined;
+  if (intermediary?.NIF !== undefined || intermediary?.cNaoNIF !== undefined) {
+    issue(issues, 'emissao.intermediario exige CPF/CNPJ; identificacao estrangeira nao e suportada');
+  }
+  validateObra(issues, request.emissao);
   validateTribMun(issues, request.emissao.tributacaoMunicipal, request.prestador.opSimpNac);
   validateTribFed(issues, request.emissao);
   validateTotTrib(issues, request.emissao, request.prestador.opSimpNac);
@@ -465,15 +508,38 @@ function collectDpsValidationIssues(request: DpsJsonRequest): string[] {
   return issues;
 }
 
+function currencyWarnings(emissao: DpsJsonInput): DpsValidationIssue[] {
+  const warnings: DpsValidationIssue[] = [];
+  const { vServ, vServMoeda, cotacao } = resolveValores(emissao);
+  const comExt = emissao.comercioExterior ?? emissao.comExt;
+  const warn = (code: string, path: string, message: string) => warnings.push({ code, path, message, severity: 'warning', source: 'sdk' });
+  if (validDecimal(vServ) && validDecimal(vServMoeda) && validDecimal(cotacao) && fixedDecimal(vServ) !== mulDecimal(vServMoeda, cotacao)) {
+    warn('CURRENCY_BRL_MISMATCH', 'valores.vServ', 'vServ difere de vServMoeda × cotacao; o valor em reais informado sera preservado.');
+  }
+  if (validDecimal(comExt?.vServMoeda) && validDecimal(vServMoeda) && fixedDecimal(comExt.vServMoeda) !== fixedDecimal(vServMoeda)) {
+    warn('CURRENCY_FOREIGN_MISMATCH', 'comercioExterior.vServMoeda', 'O valor estrangeiro do comercio exterior difere do valor da conversao; ambos serao preservados.');
+  }
+  return warnings;
+}
+
 /** Canonical non-throwing validation API shared by clients, APIs and workers. */
-export function validateDpsJsonRequest<T extends DpsJsonRequest>(request: T): DpsValidationReport<T> {
-  const issues = collectDpsValidationIssues(request).map(validationIssueFromMessage);
+export function validateDpsJsonRequest<T extends DpsJsonRequest>(request: T): DpsValidationReport<T>;
+export function validateDpsJsonRequest(request: unknown): DpsValidationReport<unknown>;
+export function validateDpsJsonRequest(request: unknown): DpsValidationReport<unknown> {
+  const structural = structuralIssues(request).map(({ path, message }) => ({
+    code: 'INVALID_STRUCTURE', path, message, severity: 'error' as const, source: 'sdk' as const,
+  }));
+  if (structural.length) return {
+    valid: false, schemaVersion: DPS_SCHEMA_VERSION, issues: structural, warnings: [], normalizedPayload: clonePayload(request),
+  };
+  const normalizedPayload = normalizeDpsRequest(request as DpsJsonRequest);
+  const issues = collectDpsValidationIssues(normalizedPayload).map(validationIssueFromMessage);
   return {
     valid: issues.length === 0,
     schemaVersion: DPS_SCHEMA_VERSION,
     issues,
-    warnings: [],
-    normalizedPayload: request,
+    warnings: currencyWarnings(normalizedPayload.emissao),
+    normalizedPayload,
   };
 }
 
