@@ -49,6 +49,9 @@ export type {
   Valores,
 } from './dpsJson.js';
 
+export { DPS_JSON_REQUEST_SCHEMA } from './dpsJsonSchema.js';
+export type { JsonSchema } from './dpsJsonSchema.js';
+
 export {
   DPS_SCHEMA_VERSION,
   DpsFiscalValidationError,

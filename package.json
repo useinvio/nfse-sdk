@@ -1,6 +1,6 @@
 {
   "name": "@useinvio/nfse-sdk",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "TypeScript SDK for Brazil's national NFS-e: JSON to DPS/XML, XMLDSIG, GZip/Base64, mTLS and SEFIN errors.",
   "type": "module",
   "main": "./dist/index.js",
@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./agent": {
+      "types": "./dist/agent.d.ts",
+      "import": "./dist/agent.js"
     },
     "./package.json": "./package.json"
   },

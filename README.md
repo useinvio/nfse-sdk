@@ -40,6 +40,7 @@ O SDK cuida da camada protocolar: certificado A1, montagem de DPS, validações 
 - [Enviar evento](#enviar-evento-ex-cancelamento)
 - [Série e número da DPS](#série-e-número-da-dps)
 - [Ambientes](#ambientes)
+- [Agentes de IA e MCP](#agentes-de-ia-e-mcp)
 - [Referência da API](#referência-da-api)
 - [Desenvolvimento](#desenvolvimento)
 - [Publicação no npm](#publicação-no-npm)
@@ -460,6 +461,34 @@ const baseUrl = resolveSefinBaseUrl('restrita');
 O SDK pode emitir métricas de latência das chamadas mTLS feitas contra a SEFIN quando `NFSE_SEFIN_LATENCY_METRICS=1` está configurada. Por padrão, percentis como `p50Ms`, `p95Ms` e `p99Ms` ficam desligados e precisam de `includePercentiles: true`. Essas métricas medem o round-trip externo da SEFIN, separado da latência total da sua API.
 
 Leia o guia completo em [docs/METRICS.md](./docs/METRICS.md).
+
+---
+
+## Agentes de IA e MCP
+
+O subpath `@useinvio/nfse-sdk/agent` expõe ferramentas neutras de framework para servidores MCP e agentes (OpenAI, LangChain, Vercel AI SDK). Cada ferramenta traz `name`, `description`, `inputSchema`/`outputSchema` em JSON Schema, `annotations` no formato MCP e um handler `run`.
+
+| Ferramenta | Efeito | Certificado |
+| --- | --- | --- |
+| `validate_dps` | Valida a requisição; nenhum efeito colateral. | Não |
+| `build_dps_xml` | Gera o XML não assinado e confere contra o XSD v1.01. | Não |
+| `get_nfse` | Consulta uma NFS-e pela chave de acesso. | Sim |
+
+```ts
+import { nfseAgentTools } from '@useinvio/nfse-sdk/agent';
+
+const context = { pfx, ambiente: 'restrita' as const }; // configuração do host
+for (const tool of nfseAgentTools) {
+  // registre tool.name, tool.description, tool.inputSchema e tool.annotations no seu framework
+  // e chame tool.run(argumentos, context) quando o modelo usar a ferramenta
+}
+```
+
+Certificado e ambiente ficam no `context` do host, nunca na entrada da ferramenta: o modelo não escolhe `producao` nem vê material de chave. Uma requisição com `ambiente` diferente do configurado gera `AMBIENTE_NOT_ALLOWED`. Falhas esperadas retornam `issues` com `code`, `path`, `severity`, `source` e `suggestion`; falhas de infraestrutura (rede, `xmllint`) rejeitam a promise. `toAgentIssues(error)` converte erros do SDK (`DpsFiscalValidationError`, `DpsXsdValidationError`, `CertificateValidationError`, `EmitirNotaError`) para esse mesmo formato.
+
+`DPS_JSON_REQUEST_SCHEMA`, exportado também pela raiz do pacote, descreve o `DpsJsonRequest` canônico em JSON Schema 2020-12 com um subconjunto portável de palavras-chave. Ele cobre formatos e domínios de códigos, mas não as regras entre campos (regime × `totTrib`, nacional × exportação); `validateDpsJsonRequest` continua sendo a autoridade. Atalhos legados (`emissao.vServ`, `comExt`) e campos rejeitados pela validação ficam fora do schema; `validate_dps` aponta campos desconhecidos como `UNSUPPORTED_FIELD` em vez de ignorá-los.
+
+A emissão ainda não é exposta como ferramenta: ela exigirá confirmação explícita antes do envio.
 
 ---
 
