@@ -38,6 +38,7 @@ The SDK handles the protocol layer: A1 certificates, DPS assembly, structural va
 - [Send Events](#send-events)
 - [DPS Series and Number](#dps-series-and-number)
 - [Environments](#environments)
+- [AI Agents and MCP](#ai-agents-and-mcp)
 - [API Reference](#api-reference)
 - [Development](#development)
 - [Publishing](#publishing)
@@ -455,6 +456,34 @@ const baseUrl = resolveSefinBaseUrl('restrita');
 The SDK can emit latency metrics for mTLS calls made to SEFIN when `NFSE_SEFIN_LATENCY_METRICS=1` is configured. Percentiles such as `p50Ms`, `p95Ms`, and `p99Ms` are off by default and require `includePercentiles: true`. These metrics measure the external SEFIN round-trip, separate from your API's total request latency.
 
 Read the full guide in [docs/METRICS.md](./docs/METRICS.md).
+
+---
+
+## AI Agents and MCP
+
+The `@useinvio/nfse-sdk/agent` subpath exposes framework-neutral tools for MCP servers and agents (OpenAI, LangChain, Vercel AI SDK). Each tool carries `name`, `description`, JSON Schema `inputSchema`/`outputSchema`, MCP-style `annotations`, and a `run` handler.
+
+| Tool | Effect | Certificate |
+| --- | --- | --- |
+| `validate_dps` | Validates the request; no side effects. | No |
+| `build_dps_xml` | Builds unsigned XML and checks it against the v1.01 XSD. | No |
+| `get_nfse` | Queries an NFS-e by access key. | Yes |
+
+```ts
+import { nfseAgentTools } from '@useinvio/nfse-sdk/agent';
+
+const context = { pfx, ambiente: 'restrita' as const }; // host configuration
+for (const tool of nfseAgentTools) {
+  // register tool.name, tool.description, tool.inputSchema and tool.annotations with your framework
+  // and call tool.run(args, context) when the model uses the tool
+}
+```
+
+Certificate and environment live in the host `context`, never in tool input: the model cannot pick `producao` or see key material. A request whose `ambiente` differs from the configured one yields `AMBIENTE_NOT_ALLOWED`. Expected failures resolve with `issues` carrying `code`, `path`, `severity`, `source`, and `suggestion`; infrastructure failures (network, `xmllint`) reject. `toAgentIssues(error)` converts SDK errors (`DpsFiscalValidationError`, `DpsXsdValidationError`, `CertificateValidationError`, `EmitirNotaError`) to the same shape.
+
+`DPS_JSON_REQUEST_SCHEMA`, also exported from the package root, describes the canonical `DpsJsonRequest` as JSON Schema 2020-12 using a portable keyword subset. It covers formats and code domains, not cross-field rules (regime × `totTrib`, national × export); `validateDpsJsonRequest` remains the authority. Legacy shortcuts (`emissao.vServ`, `comExt`) and fields the validator rejects are left out; `validate_dps` reports unknown fields as `UNSUPPORTED_FIELD` instead of ignoring them.
+
+Issuing is not exposed as a tool yet: it will require explicit confirmation before transmission.
 
 ---
 

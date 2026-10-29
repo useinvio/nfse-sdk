@@ -1,50 +1,18 @@
 import { decimalParts, fixedDecimal, mulDecimal } from './decimal.js';
+import * as domains from './fiscalDomains.js';
+import { domainValues } from './fiscalDomains.js';
 import { clonePayload, normalizeDpsRequest, resolveValores, structuralIssues } from './dpsNormalization.js';
 import type { DpsJsonInput, DpsJsonRequest, PrestadorProfile, ServicoProfile, TribMun } from './dpsJson.js';
 
-const OP_SIMP_NAC = new Set(['1', '2', '3']);
-const REG_AP_TRIB_SN = new Set(['1', '2', '3']);
-const REG_ESP_TRIB = new Set(['0', '1', '2', '3', '4', '5', '6', '9']);
-const TRIB_ISSQN = new Set(['1', '2', '3', '4']);
-const TP_IMUNIDADE = new Set(['0', '1', '2', '3', '4', '5']);
-const TP_RET_ISSQN = new Set(['1', '2', '3']);
-const C_NAO_NIF = new Set(['1', '2']);
-const PIS_COFINS_CST = new Set([
-  '00',
-  '01',
-  '02',
-  '03',
-  '04',
-  '05',
-  '06',
-  '07',
-  '08',
-  '09',
-  '49',
-  '50',
-  '51',
-  '52',
-  '53',
-  '54',
-  '55',
-  '56',
-  '60',
-  '61',
-  '62',
-  '63',
-  '64',
-  '65',
-  '66',
-  '67',
-  '70',
-  '71',
-  '72',
-  '73',
-  '74',
-  '75',
-  '98',
-  '99',
-]);
+const OP_SIMP_NAC = new Set(domainValues(domains.OP_SIMP_NAC));
+const REG_AP_TRIB_SN = new Set(domainValues(domains.REG_AP_TRIB_SN));
+const REG_ESP_TRIB = new Set(domainValues(domains.REG_ESP_TRIB));
+const TRIB_ISSQN = new Set(domainValues(domains.TRIB_ISSQN));
+const TP_IMUNIDADE = new Set(domainValues(domains.TP_IMUNIDADE));
+const TP_RET_ISSQN = new Set(domainValues(domains.TP_RET_ISSQN));
+const C_NAO_NIF = new Set(domainValues(domains.C_NAO_NIF));
+const PIS_COFINS_CST = new Set(domains.PIS_COFINS_CST);
+const TP_RET_PIS_COFINS = new Set(domainValues(domains.TP_RET_PIS_COFINS));
 
 export class DpsFiscalValidationError extends Error {
   public readonly issues: DpsValidationIssue[];
@@ -414,16 +382,16 @@ function validateUnsupportedShapes(issues: string[], emissao: DpsJsonInput): voi
 function validateComercioExterior(issues: string[], emissao: DpsJsonInput): void {
   const comExt = emissao.comercioExterior ?? emissao.comExt;
   if (!comExt) return;
-  const domains = {
-    mdPrestacao: ['0', '1', '2', '3', '4'],
-    vincPrest: ['0', '1', '2', '3', '4', '5', '6', '9'],
-    mecAFComexP: Array.from({ length: 9 }, (_, i) => String(i).padStart(2, '0')),
-    mecAFComexT: Array.from({ length: 27 }, (_, i) => String(i).padStart(2, '0')),
-    movTempBens: ['0', '1', '2', '3'],
-    mdic: ['0', '1'],
+  const comExtDomains = {
+    mdPrestacao: domains.MD_PRESTACAO,
+    vincPrest: domains.VINC_PREST,
+    mecAFComexP: domains.MEC_AF_COMEX_P,
+    mecAFComexT: domains.MEC_AF_COMEX_T,
+    movTempBens: domains.MOV_TEMP_BENS,
+    mdic: domains.MDIC,
   };
-  for (const field of Object.keys(domains) as Array<keyof typeof domains>) {
-    assertEnum(issues, `emissao.comercioExterior.${field}`, comExt[field], new Set(domains[field]));
+  for (const field of Object.keys(comExtDomains) as Array<keyof typeof comExtDomains>) {
+    assertEnum(issues, `emissao.comercioExterior.${field}`, comExt[field], new Set(domainValues(comExtDomains[field])));
   }
   assertPattern(issues, 'emissao.comercioExterior.tpMoeda', comExt.tpMoeda, /^\d{3}$/, '3 digitos numericos');
   validateDecimalOutput(issues, 'emissao.comercioExterior.vServMoeda', comExt.vServMoeda ?? resolveValores(emissao).vServMoeda, 15, true);
@@ -468,7 +436,7 @@ function validateTribFed(issues: string[], emissao: DpsJsonInput): void {
   const piscofins = trib?.piscofins;
   if (!piscofins) return;
   if (piscofins.tpRetPisCofins !== undefined) {
-    assertEnum(issues, 'emissao.tributacaoFederal.piscofins.tpRetPisCofins', piscofins.tpRetPisCofins, new Set(Array.from({ length: 10 }, (_, i) => String(i))));
+    assertEnum(issues, 'emissao.tributacaoFederal.piscofins.tpRetPisCofins', piscofins.tpRetPisCofins, TP_RET_PIS_COFINS);
   }
   assertEnum(issues, 'emissao.tributacaoFederal.piscofins.CST', piscofins.CST, PIS_COFINS_CST);
   validateDecimalOutput(issues, 'emissao.tributacaoFederal.piscofins.vBCPisCofins', piscofins.vBCPisCofins, 15);

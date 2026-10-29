@@ -24,6 +24,8 @@ It is not a fiscal decision engine. Do not infer tax codes, accounting rules, te
 - `consultarNfse(...)`, `enviarEvento(...)`, `extrairErros(...)`: lower-level SEFIN helpers.
 - `setSefinRequestObserver(...)` and `createSefinLatencyTracker(...)`: observe SEFIN round-trip latency when `NFSE_SEFIN_LATENCY_METRICS` is enabled; percentiles require `includePercentiles: true`.
 - `gzipBase64(...)`, `gunzipBase64(...)`, `signDps(...)`, `verifyDps(...)`: protocol utilities for custom flows.
+- `DPS_JSON_REQUEST_SCHEMA`: JSON Schema 2020-12 for the canonical `DpsJsonRequest` (formats and code domains; cross-field rules stay in `validateDpsJsonRequest`).
+- `@useinvio/nfse-sdk/agent`: framework-neutral agent/MCP tools (`validate_dps`, `build_dps_xml`, `get_nfse`) and `toAgentIssues(error)`. Certificate and environment come from the host context, never from tool input.
 
 ## File Map
 
@@ -36,6 +38,10 @@ It is not a fiscal decision engine. Do not infer tax codes, accounting rules, te
 - `loadPfx.ts`: PFX/A1 certificate decoding with `node-forge`.
 - `signXml.ts`: XMLDSIG signing and verification helpers.
 - `gzipB64.ts`: GZip/Base64 helpers.
+- `fiscalDomains.ts`: code domains shared by the validator and the JSON Schema.
+- `dpsJsonSchema.ts`: JSON Schema for `DpsJsonRequest`; `satisfies` checks fail the build when a type gains a field the schema does not describe.
+- `jsonSchemaCheck.ts`: internal validator for the portable keyword subset the schema may use.
+- `agent.ts`: agent tool definitions, unified `NfseAgentIssue` shape, and error mapping.
 
 ## Core Data Shape
 
@@ -70,7 +76,7 @@ Keep values as strings when they represent fiscal codes, identifiers, decimals, 
 
 - Preserve the public API names exported by `index.ts` unless the task explicitly asks for a breaking change.
 - Prefer adding or adjusting focused tests in `test/` when changing XML generation, validation, signing, transport parsing, or client defaults.
-- When adding support for a new NFS-e layout field, update the TypeScript interface, validation rules, builder output, docs/examples, and tests together.
+- When adding support for a new NFS-e layout field, update the TypeScript interface, validation rules, JSON Schema (`dpsJsonSchema.ts`), builder output, docs/examples, and tests together.
 - Do not add fiscal assumptions to make examples pass. Required fiscal choices should stay explicit in user input.
 - Be careful with XML ordering. The generated order should follow the SEFIN schema, and tests may compare XML snippets.
 - Do not hand-wave certificate handling. PFX content may arrive as a `Buffer` or base64 string.
