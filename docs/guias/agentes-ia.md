@@ -17,6 +17,15 @@ do próprio servidor:
 claude mcp add nfse --env NFSE_MCP_MOCK=1 --env NFSE_MCP_ALLOW_WRITE=1 -- npx -y @useinvio/nfse-mcp
 ```
 
+> **Ainda não publicado.** `@useinvio/nfse-mcp` chega ao npm junto com o SDK 3.2.0,
+> e o plugin do Claude Code depende dessa publicação. Até lá, rode o servidor a
+> partir de um clone do repositório (`npm install` já compila):
+
+```bash
+git clone https://github.com/useinvio/nfse-sdk && cd nfse-sdk && npm install
+claude mcp add nfse --env NFSE_MCP_MOCK=1 --env NFSE_MCP_ALLOW_WRITE=1 -- node "$PWD/dist/mcpCli.js"
+```
+
 Com o seu certificado A1, na produção restrita e só com ferramentas de leitura:
 
 ```bash

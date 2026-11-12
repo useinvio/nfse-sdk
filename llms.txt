@@ -85,7 +85,7 @@ mock.restore();
 
 ## AI agents and MCP
 
-- `npx -y @useinvio/nfse-mcp`: MCP stdio server. Env: certificate vars above, `NFSE_AMBIENTE`, `NFSE_MCP_ALLOW_WRITE=1` (emit/cancel), `NFSE_MCP_MOCK=1` (mock SEFIN).
+- `npx -y @useinvio/nfse-mcp`: MCP stdio server (published together with SDK 3.2.0; before that, build the repo and run `node dist/mcpCli.js`). Env: certificate vars above, `NFSE_AMBIENTE`, `NFSE_MCP_ALLOW_WRITE=1` (emit/cancel), `NFSE_MCP_MOCK=1` (mock SEFIN).
 - `@useinvio/nfse-sdk/agent`: `nfseAgentTools` (read-only: `validate_dps`, `build_dps_xml`, `get_nfse`, `recover_nfse_by_dps`, `explain_rejection`) and `createNfseAgentToolkit({ allowWrite })`, which adds `prepare_*`/`confirm_*` emission and cancellation. Certificate and environment are host context, never tool input. Only call `confirm_*` after the user approves the summary from `prepare_*`.
 - Claude Code plugin: `/plugin install nfse-nacional --marketplace useinvio/nfse-sdk`.
 

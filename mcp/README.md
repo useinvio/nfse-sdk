@@ -13,6 +13,15 @@ Nothing is sent anywhere.
 claude mcp add nfse --env NFSE_MCP_MOCK=1 --env NFSE_MCP_ALLOW_WRITE=1 -- npx -y @useinvio/nfse-mcp
 ```
 
+> **Not published yet.** `@useinvio/nfse-mcp` reaches npm together with SDK 3.2.0,
+> and the Claude Code plugin depends on that release. Until then, run the server
+> from a clone of the repository (`npm install` builds it):
+
+```bash
+git clone https://github.com/useinvio/nfse-sdk && cd nfse-sdk && npm install
+claude mcp add nfse --env NFSE_MCP_MOCK=1 --env NFSE_MCP_ALLOW_WRITE=1 -- node "$PWD/dist/mcpCli.js"
+```
+
 Then ask: *"Valide e emita uma NFS-e de teste de R$ 10 para desenvolvimento de software."*
 
 ## With your A1 certificate

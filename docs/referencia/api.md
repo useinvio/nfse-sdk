@@ -88,7 +88,7 @@ Guia: [Testar sem certificado](../guias/testes.md).
 | `createNfseAgentToolkit({ allowWrite?, confirmationTtlMs? })` (`/agent`) | Leitura + emissão e cancelamento em duas etapas. |
 | `toAgentIssues(error)` (`/agent`) | Converte erros do SDK em issues para o modelo. |
 | `createNfseMcpServer(opts)` / `runNfseMcpStdio(opts?)` (`/mcp`) | Servidor MCP sem dependências. |
-| `nfse-mcp` (bin) | `npx -y @useinvio/nfse-mcp` ou `npx -y -p @useinvio/nfse-sdk nfse-mcp`. |
+| `nfse-mcp` (bin) | `npx -y @useinvio/nfse-mcp` ou `npx -y -p @useinvio/nfse-sdk nfse-mcp`, ambos a partir da publicação do SDK 3.2.0. |
 
 Guia: [Agentes de IA e MCP](../guias/agentes-ia.md).
 
