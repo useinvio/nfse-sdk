@@ -1,9 +1,19 @@
+import { X509Certificate } from 'node:crypto';
 import forge from 'node-forge';
-import type { PfxMaterial } from './loadPfx.js';
+import { icpBrasilTaxIds, NfseCertificate, resolveCredentials, type CertificateInput } from './certificate.js';
+
+export type CertificateValidationCode =
+  | 'CERTIFICATE_NOT_YET_VALID'
+  | 'CERTIFICATE_EXPIRED'
+  | 'CERTIFICATE_HOLDER_MISMATCH'
+  | 'CERTIFICATE_INVALID_PASSWORD'
+  | 'CERTIFICATE_UNREADABLE'
+  | 'CERTIFICATE_MISSING'
+  | 'CERTIFICATE_PASSWORD_MISSING';
 
 export class CertificateValidationError extends Error {
   constructor(
-    public readonly code: 'CERTIFICATE_NOT_YET_VALID' | 'CERTIFICATE_EXPIRED' | 'CERTIFICATE_HOLDER_MISMATCH',
+    public readonly code: CertificateValidationCode,
     message: string,
   ) {
     super(message);
@@ -11,26 +21,35 @@ export class CertificateValidationError extends Error {
   }
 }
 
+function validityOf(input: CertificateInput): { notBefore: Date; notAfter: Date } {
+  if (input instanceof NfseCertificate) return input;
+  const x509 = new X509Certificate(resolveCredentials(input).certPem);
+  return { notBefore: new Date(x509.validFrom), notAfter: new Date(x509.validTo) };
+}
+
 /** Validity is checked at signing time and again immediately before transmission. */
-export function assertCertificateValidity(pfx: PfxMaterial, now = new Date()): void {
-  const certificate = forge.pki.certificateFromPem(pfx.certPem);
-  if (now < certificate.validity.notBefore) {
+export function assertCertificateValidity(certificate: CertificateInput, now = new Date()): void {
+  const { notBefore, notAfter } = validityOf(certificate);
+  if (now < notBefore) {
     throw new CertificateValidationError('CERTIFICATE_NOT_YET_VALID', 'O certificado digital ainda nao esta vigente.');
   }
-  if (now >= certificate.validity.notAfter) {
+  if (now >= notAfter) {
     throw new CertificateValidationError('CERTIFICATE_EXPIRED', 'O certificado digital esta expirado.');
   }
 }
 
-/** Explicit holder check; does not resolve fiscal representation/authorization. */
-export function assertCertificateForProvider(pfx: PfxMaterial, providerTaxId: string, now = new Date()): void {
-  assertCertificateValidity(pfx, now);
-  const certificate = forge.pki.certificateFromPem(pfx.certPem);
+/**
+ * Explicit holder check against the ICP-Brasil CNPJ/CPF fields of the
+ * certificate (otherName OIDs 2.16.76.1.3.3 / 2.16.76.1.3.1, or the
+ * `NOME:DOCUMENTO` common name). Does not resolve fiscal representation.
+ */
+export function assertCertificateForProvider(certificate: CertificateInput, providerTaxId: string, now = new Date()): void {
+  assertCertificateValidity(certificate, now);
   const expected = providerTaxId.replace(/\D/g, '');
-  const subjectText = certificate.subject.attributes.map((attribute) => String(attribute.value)).join(' ');
-  const derText = forge.asn1.toDer(forge.pki.certificateToAsn1(certificate)).getBytes();
-  const taxIds: string[] = `${subjectText} ${derText}`.match(/\d{11}(?:\d{3})?/g) ?? [];
-  if (!taxIds.includes(expected)) {
+  const { cnpj, cpf } = certificate instanceof NfseCertificate
+    ? certificate
+    : icpBrasilTaxIds(forge.pki.certificateFromPem(resolveCredentials(certificate).certPem));
+  if (expected !== cnpj && expected !== cpf) {
     throw new CertificateValidationError(
       'CERTIFICATE_HOLDER_MISMATCH',
       'O titular do certificado digital nao corresponde ao CPF/CNPJ do emitente.',

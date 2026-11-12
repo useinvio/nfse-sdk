@@ -1,7 +1,7 @@
 import { DOMParser } from '@xmldom/xmldom';
-import { execFileSync } from 'node:child_process';
+import { XmlDocument, XmlParseError } from 'libxml2-wasm';
 import type { Ambiente } from './config.js';
-import { XmllintUnavailableError } from './xsdValidation.js';
+import { SAFE_PARSE_OPTIONS, XsdEngineUnavailableError } from './xsdValidation.js';
 
 const NS = 'http://www.sped.fazenda.gov.br/nfse';
 
@@ -15,15 +15,15 @@ export function parseNfseXml(xml: string, rootName: 'DPS' | 'NFSe'): Element {
     throw new Error(`XML ${rootName} invalido: documento malformado, raiz ou namespace inesperado.`);
   }
   // xmldom recovers silently from some malformed XML (e.g. unescaped '&').
-  // Use the existing XML runtime for strict syntax checking, without fetching DTDs.
+  // Use libxml2 (WebAssembly) for strict syntax checking, without fetching DTDs.
+  let strict: XmlDocument | undefined;
   try {
-    execFileSync('xmllint', ['--noout', '--nonet', '-'], {
-      input: xml, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    strict = XmlDocument.fromString(xml, { option: SAFE_PARSE_OPTIONS });
   } catch (error) {
-    const failure = error as { status?: number; code?: string };
-    if (failure.status === 1) throw new Error(`XML ${rootName} invalido: documento malformado.`);
-    throw new XmllintUnavailableError(`Falha ao verificar XML ${rootName} com xmllint (${failure.code ?? failure.status ?? 'desconhecida'}).`, error);
+    if (error instanceof XmlParseError) throw new Error(`XML ${rootName} invalido: documento malformado.`);
+    throw new XsdEngineUnavailableError(`Falha ao verificar XML ${rootName}: ${error instanceof Error ? error.message : String(error)}`, error);
+  } finally {
+    strict?.dispose();
   }
   return root;
 }

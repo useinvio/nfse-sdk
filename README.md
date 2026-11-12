@@ -44,8 +44,7 @@ O SDK cuida da camada protocolar: certificado A1, montagem de DPS, validações 
 - [Referência da API](#referência-da-api)
 - [Desenvolvimento](#desenvolvimento)
 - [Publicação no npm](#publicação-no-npm)
-- [Divulgação e exemplos](#divulgação-e-exemplos)
-- [Assistente GPT](#assistente-gpt)
+- [Exemplos](#exemplos)
 
 ---
 
@@ -55,7 +54,7 @@ O SDK cuida da camada protocolar: certificado A1, montagem de DPS, validações 
 npm install @useinvio/nfse-sdk
 ```
 
-> Node.js ≥ 20 é obrigatório.
+> Node.js ≥ 20 é obrigatório. Não precisa de `xmllint` nem de binários nativos: a validação XSD roda em WebAssembly.
 
 ---
 
@@ -64,9 +63,10 @@ npm install @useinvio/nfse-sdk
 O caminho mais comum: emitir uma nota a partir de JSON declarativo.
 
 ```ts
-import { emitirNfse, loadPfx, EmitirNotaError } from '@useinvio/nfse-sdk';
+import { emitirNfse, EmitirNotaError, NfseCertificate } from '@useinvio/nfse-sdk';
 
-const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
+// NFSE_CERT_PATH=./certificado.pfx e NFSE_CERT_PASSWORD=... (veja Certificado A1)
+const certificado = NfseCertificate.fromEnv();
 
 const nota = {
   ambiente: 'restrita' as const,
@@ -104,7 +104,7 @@ const nota = {
 };
 
 try {
-  const resultado = await emitirNfse(nota, pfx);
+  const resultado = await emitirNfse(nota, certificado);
   console.log(resultado.chaveAcesso); // chave de 50 dígitos
   console.log(resultado.nfseXml);    // XML autorizado pela SEFIN
 } catch (error) {
@@ -134,8 +134,8 @@ try {
 | Situação | O que usar |
 |---|---|
 | Quer uma API de cliente com `client.invoices.create(...)` | `new NfseClient(...)` |
-| Outro sistema já gera o XML da DPS | `emitirNfse(xmlString, pfx)` |
-| Você monta os dados e quer que a SDK construa o XML | `emitirNfse(notaJson, pfx)` |
+| Outro sistema já gera o XML da DPS | `emitirNfse(xmlString, certificado)` |
+| Você monta os dados e quer que a SDK construa o XML | `emitirNfse(notaJson, certificado)` |
 | Precisa inspecionar ou salvar o XML antes de enviar | `buildDpsFromJson(nota)` |
 | Fluxo customizado (assinar, compactar ou enviar separadamente) | funções de baixo nível |
 
@@ -151,14 +151,11 @@ O cliente usa os mesmos campos do JSON declarativo (`prestador`, `servico` e
 cada chamada.
 
 ```ts
-import { NfseClient } from '@useinvio/nfse-sdk';
+import { NfseCertificate, NfseClient } from '@useinvio/nfse-sdk';
 
 const client = new NfseClient({
   environment: 'sandbox',
-  certificate: {
-    content: process.env.NFSE_CERTIFICATE!, // PFX em base64
-    password: process.env.NFSE_CERTIFICATE_PASSWORD!,
-  },
+  certificate: NfseCertificate.fromEnv(),
   defaults: {
     prestador: {
       cnpj: '12345678000195',
@@ -207,9 +204,8 @@ console.log(invoice.nfseXml);
 ```
 
 `environment: 'sandbox'` é alias de `restrita`, e `production` é alias de
-`producao`. O campo `certificate.content` aceita o conteúdo binário do PFX em
-`Buffer` ou o PFX codificado em base64, formato comum para variáveis de
-ambiente.
+`producao`. `certificate` aceita um `NfseCertificate` ou, por compatibilidade,
+`{ content, password }` com o PFX em `Buffer` ou base64.
 
 Para inspecionar a DPS gerada sem assinar nem enviar:
 
@@ -236,7 +232,7 @@ const dps = client.invoices.buildDpsJson({
 
 Divergencias entre `vServ` e a conversao cambial geram avisos, preservando o valor explicito. O mesmo vale para o valor estrangeiro do bloco de comercio exterior. Todos os valores monetarios sao arredondados para duas casas, inclusive `comExt.vServMoeda`; valores de servico que arredondam para zero sao rejeitados. Leia `warnings` antes da emissao quando quiser apresentar esses avisos ao usuario.
 
-`prepararNota` verifica a vigencia do certificado antes de assinar; `transmitirNotaPreparada` verifica novamente antes do envio. `assertCertificateValidity(pfx, now?)` expoe essa verificacao. A checagem de titularidade continua explicita via `assertCertificateForProvider(pfx, documento, now?)`; o SDK nao resolve representacao fiscal.
+`prepararNota` verifica a vigencia do certificado antes de assinar; `transmitirNotaPreparada` verifica novamente antes do envio. `assertCertificateValidity(certificado, now?)` expoe essa verificacao. A checagem de titularidade continua explicita via `assertCertificateForProvider(certificado, documento, now?)`; o SDK nao resolve representacao fiscal.
 
 O ambiente para JSON segue `options.ambiente` → `request.ambiente` → `restrita`, tanto no XML quanto no destino. XML externo usa `tpAmb` e rejeita uma opcao divergente. Notas preparadas tambem precisam ter o mesmo ambiente no XML assinado e no envio.
 
@@ -250,23 +246,66 @@ Veja [as correcoes e mudancas de comportamento](docs/CORRECOES_EMISSAO.md) e os 
 
 ## Certificado A1
 
-### A partir de arquivo
+Use `NfseCertificate`. Ele lê o `.pfx`/`.p12` uma vez, mantém a chave privada fora do objeto e descarta a senha e os bytes do arquivo. `console.log(certificado)` e `JSON.stringify(certificado)` mostram só CNPJ/CPF, validade e fingerprint.
 
-```ts
-import { loadPfx } from '@useinvio/nfse-sdk';
+### Variáveis de ambiente (recomendado)
 
-const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
+```bash
+NFSE_CERT_PATH=./certificado.pfx   # ou NFSE_CERT_BASE64=<PFX em base64>
+NFSE_CERT_PASSWORD=sua-senha       # ou NFSE_CERT_PASSWORD_FILE=/run/secrets/nfse_cert_password
 ```
 
-### A partir de buffer (ex.: certificado descriptografado do banco)
-
 ```ts
-import { loadPfxFromBuffer } from '@useinvio/nfse-sdk';
+import { NfseCertificate } from '@useinvio/nfse-sdk';
 
-const pfx = loadPfxFromBuffer(pfxBuffer, password);
+const certificado = NfseCertificate.fromEnv();
+console.log(certificado.cnpj, certificado.notAfter, certificado.daysUntilExpiry());
 ```
 
-O objeto `pfx` retornado contém chave privada e certificado em PEM, pronto para assinar e fazer mTLS.
+`NFSE_CERT_PASSWORD_FILE` lê a senha de um arquivo, o formato de secrets do Docker e do Kubernetes. Nunca versione o `.pfx` nem a senha.
+
+### Outras origens
+
+```ts
+NfseCertificate.fromFile('./certificado.pfx', senha);
+NfseCertificate.fromBase64(pfxBase64, senha);        // aceita quebras de linha e data: URLs
+NfseCertificate.fromPfx(pfxBuffer, senha);           // ex.: PFX vindo do seu cofre de segredos
+NfseCertificate.fromPem({ key, cert, passphrase });  // par extraído com openssl
+```
+
+### Vários emitentes (multi-tenant)
+
+Crie um `NfseCertificate` por emitente e reaproveite-o. Cada certificado tem o próprio agente mTLS, então conexões nunca são compartilhadas entre emitentes. Guarde o PFX cifrado (KMS, Vault, Secrets Manager) e a senha em um segredo separado, e descriptografe só ao criar o objeto.
+
+```ts
+import { assertCertificateForProvider, NfseCertificate } from '@useinvio/nfse-sdk';
+
+const cache = new Map<string, NfseCertificate>();
+
+async function certificadoDoEmitente(cnpj: string): Promise<NfseCertificate> {
+  const cached = cache.get(cnpj);
+  if (cached?.isValidAt()) return cached;
+  const { pfx, senha } = await cofre.buscarCertificado(cnpj); // seu secret manager
+  const certificado = NfseCertificate.fromPfx(pfx, senha);
+  assertCertificateForProvider(certificado, cnpj);
+  cache.set(cnpj, certificado);
+  return certificado;
+}
+```
+
+### Erros de certificado
+
+Todos lançam `CertificateValidationError` com um `code` estável:
+
+| `code` | Quando |
+|---|---|
+| `CERTIFICATE_INVALID_PASSWORD` | Senha incorreta. |
+| `CERTIFICATE_UNREADABLE` | O conteúdo não é um PFX/PEM válido. |
+| `CERTIFICATE_MISSING`, `CERTIFICATE_PASSWORD_MISSING` | Variáveis de ambiente ausentes em `fromEnv`. |
+| `CERTIFICATE_NOT_YET_VALID`, `CERTIFICATE_EXPIRED` | Fora da vigência. Verificado antes de assinar e antes de enviar. |
+| `CERTIFICATE_HOLDER_MISMATCH` | `assertCertificateForProvider` com CPF/CNPJ diferente do titular. |
+
+> `loadPfx` e `loadPfxFromBuffer` continuam funcionando, mas retornam a chave privada em PEM dentro de um objeto comum. Prefira `NfseCertificate`.
 
 ---
 
@@ -275,11 +314,11 @@ O objeto `pfx` retornado contém chave privada e certificado em PEM, pronto para
 Use quando outro sistema (ERP, sistema legado) já gera o XML da DPS no layout nacional.
 
 ```ts
-import { emitirNfse, loadPfx } from '@useinvio/nfse-sdk';
+import { emitirNfse, NfseCertificate } from '@useinvio/nfse-sdk';
 
-const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
+const certificado = NfseCertificate.fromEnv();
 
-const resultado = await emitirNfse(dpsXml, pfx, { ambiente: 'restrita' });
+const resultado = await emitirNfse(dpsXml, certificado, { ambiente: 'restrita' });
 
 console.log(resultado.chaveAcesso);
 console.log(resultado.nfseXml);
@@ -297,7 +336,7 @@ Para a referência completa de campos aceitos no JSON, consulte [JSON_MAPPING.md
 O builder valida formatos e combinações mínimas antes de gerar XML, mas não escolhe códigos fiscais por você. Campos como `tributacaoMunicipal` e `totTrib` precisam ser informados explicita[...]
 
 ```ts
-import { emitirNfse, loadPfx, type DpsJsonRequest } from '@useinvio/nfse-sdk';
+import { emitirNfse, NfseCertificate, type DpsJsonRequest } from '@useinvio/nfse-sdk';
 
 const nota: DpsJsonRequest = {
   ambiente: 'restrita',
@@ -334,8 +373,8 @@ const nota: DpsJsonRequest = {
   },
 };
 
-const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
-const resultado = await emitirNfse(nota, pfx);
+const certificado = NfseCertificate.fromEnv();
+const resultado = await emitirNfse(nota, certificado);
 ```
 
 > `pTotTribFed`, `pTotTribEst` e `pTotTribMun` são percentuais com duas casas decimais (ex.: `"5.00"`), diferentes das alíquotas com quatro casas (`pAliq`).
@@ -366,7 +405,7 @@ console.log(xml); // XML não assinado da DPS
 import { EmitirNotaError, emitirNfse } from '@useinvio/nfse-sdk';
 
 try {
-  await emitirNfse(nota, pfx);
+  await emitirNfse(nota, certificado);
 } catch (error) {
   if (!(error instanceof EmitirNotaError)) throw error;
 
@@ -388,7 +427,7 @@ try {
 ```ts
 import { consultarNfse } from '@useinvio/nfse-sdk';
 
-const resposta = await consultarNfse(chaveAcesso, pfx, 'restrita');
+const resposta = await consultarNfse(chaveAcesso, certificado, 'restrita');
 
 if (resposta.status === 200) {
   console.log(resposta.body);
@@ -404,10 +443,10 @@ if (resposta.status === 200) {
 ```ts
 import { enviarEvento, gzipBase64, signEnveloped } from '@useinvio/nfse-sdk';
 
-const signedEventXml = signEnveloped(pedRegXml, pedRegId, 'infPedReg', pfx);
+const signedEventXml = signEnveloped(pedRegXml, pedRegId, 'infPedReg', certificado);
 const pedRegXmlGZipB64 = gzipBase64(signedEventXml);
 
-const resposta = await enviarEvento(pedRegXmlGZipB64, pfx, chaveAcesso, 'restrita');
+const resposta = await enviarEvento(pedRegXmlGZipB64, certificado, chaveAcesso, 'restrita');
 ```
 
 ---
@@ -477,14 +516,14 @@ O subpath `@useinvio/nfse-sdk/agent` expõe ferramentas neutras de framework par
 ```ts
 import { nfseAgentTools } from '@useinvio/nfse-sdk/agent';
 
-const context = { pfx, ambiente: 'restrita' as const }; // configuração do host
+const context = { pfx: certificado, ambiente: 'restrita' as const }; // configuração do host
 for (const tool of nfseAgentTools) {
   // registre tool.name, tool.description, tool.inputSchema e tool.annotations no seu framework
   // e chame tool.run(argumentos, context) quando o modelo usar a ferramenta
 }
 ```
 
-Certificado e ambiente ficam no `context` do host, nunca na entrada da ferramenta: o modelo não escolhe `producao` nem vê material de chave. Uma requisição com `ambiente` diferente do configurado gera `AMBIENTE_NOT_ALLOWED`. Falhas esperadas retornam `issues` com `code`, `path`, `severity`, `source` e `suggestion`; falhas de infraestrutura (rede, `xmllint`) rejeitam a promise. `toAgentIssues(error)` converte erros do SDK (`DpsFiscalValidationError`, `DpsXsdValidationError`, `CertificateValidationError`, `EmitirNotaError`) para esse mesmo formato.
+Certificado e ambiente ficam no `context` do host, nunca na entrada da ferramenta: o modelo não escolhe `producao` nem vê material de chave. Uma requisição com `ambiente` diferente do configurado gera `AMBIENTE_NOT_ALLOWED`. Falhas esperadas retornam `issues` com `code`, `path`, `severity`, `source` e `suggestion`; falhas de infraestrutura (rede, motor XSD) rejeitam a promise. `toAgentIssues(error)` converte erros do SDK (`DpsFiscalValidationError`, `DpsXsdValidationError`, `CertificateValidationError`, `EmitirNotaError`) para esse mesmo formato.
 
 `DPS_JSON_REQUEST_SCHEMA`, exportado também pela raiz do pacote, descreve o `DpsJsonRequest` canônico em JSON Schema 2020-12 com um subconjunto portável de palavras-chave. Ele cobre formatos e domínios de códigos, mas não as regras entre campos (regime × `totTrib`, nacional × exportação); `validateDpsJsonRequest` continua sendo a autoridade. Atalhos legados (`emissao.vServ`, `comExt`) e campos rejeitados pela validação ficam fora do schema; `validate_dps` aponta campos desconhecidos como `UNSUPPORTED_FIELD` em vez de ignorá-los.
 
@@ -499,9 +538,9 @@ A emissão ainda não é exposta como ferramenta: ela exigirá confirmação exp
 | Função | Descrição |
 |---|---|
 | `new NfseClient(options)` | Cria cliente com ambiente, certificado e defaults no mesmo formato do JSON declarativo. |
-| `emitirNfse(input, pfx, options?)` | Emite uma NFS-e a partir de XML ou JSON. Retorna `ResultadoEmissaoNota`. |
-| `consultarNfse(chaveAcesso, pfx, ambiente?)` | Consulta uma NFS-e pela chave de acesso. |
-| `enviarEvento(xmlGzipB64, pfx, chaveAcesso, ambiente?)` | Envia evento fiscal (cancelamento, etc.). |
+| `emitirNfse(input, certificado, options?)` | Emite uma NFS-e a partir de XML ou JSON. Retorna `ResultadoEmissaoNota`. |
+| `consultarNfse(chaveAcesso, certificado, ambiente?)` | Consulta uma NFS-e pela chave de acesso. |
+| `enviarEvento(xmlGzipB64, certificado, chaveAcesso, ambiente?)` | Envia evento fiscal (cancelamento, etc.). |
 | `buildDpsFromJson(nota)` | Monta o XML da DPS sem assinar nem enviar. |
 | `setSefinRequestObserver(observer)` | Registra um hook para observar latência/status das chamadas à SEFIN. |
 | `createSefinLatencyTracker(options?)` | Agrega amostras recentes e pode calcular percentis quando `includePercentiles` estiver habilitado. |
@@ -510,17 +549,18 @@ A emissão ainda não é exposta como ferramenta: ela exigirá confirmação exp
 
 | Função | Descrição |
 |---|---|
-| `assertCertificateValidity(pfx, now?)` | Verifica vigencia do certificado; aplicada na preparacao e no envio. |
-| `assertCertificateForProvider(pfx, documento, now?)` | Verifica explicitamente vigencia e correspondencia do titular. |
-| `loadPfx(path, password)` | Carrega certificado A1 a partir de arquivo. |
-| `loadPfxFromBuffer(buffer, password)` | Carrega certificado A1 a partir de buffer. |
+| `assertCertificateValidity(certificado, now?)` | Verifica vigencia do certificado; aplicada na preparacao e no envio. |
+| `assertCertificateForProvider(certificado, documento, now?)` | Verifica explicitamente vigencia e correspondencia do titular. |
+| `NfseCertificate.fromEnv()` / `fromFile()` / `fromBase64()` / `fromPfx()` / `fromPem()` | Carrega o certificado A1 sem expor a chave privada. |
+| `loadPfx(path, password)` | Legado: retorna a chave em PEM. Prefira `NfseCertificate`. |
+| `loadPfxFromBuffer(buffer, password)` | Legado: retorna a chave em PEM. Prefira `NfseCertificate`. |
 
 ### Funções de baixo nível
 
 | Função | Descrição |
 |---|---|
-| `signDps(xml, dpsId, pfx)` | Assina XML de DPS com XMLDSIG. |
-| `signEnveloped(xml, id, ref, pfx)` | Assina XML genérico (eventos). |
+| `signDps(xml, dpsId, certificado)` | Assina XML de DPS com XMLDSIG. |
+| `signEnveloped(xml, id, ref, certificado)` | Assina XML genérico (eventos). |
 | `verifyDps(xml, certPem)` | Verifica assinatura de uma DPS. |
 | `gzipBase64(xml)` | Compacta XML em GZip e codifica em Base64. |
 | `gunzipBase64(b64)` | Descompacta resposta GZip/Base64. |
@@ -566,7 +606,7 @@ npm run build       # compila para dist/
 npm test            # build + tipos + testes unitários
 ```
 
-`npm test` também valida uma DPS gerada contra os XSD oficiais em `schemas/nfse/v1.01/Schemas/1.01`. Para compatibilidade com `xmllint`, o teste corrige em uma cópia temporária a âncora regex[...]
+`npm test` também valida as DPS geradas contra os XSD oficiais em `schemas/nfse/v1.01/Schemas/1.01` com o motor embutido (libxml2 em WebAssembly). Se o `xmllint` estiver instalado, como no CI, os testes também o usam como verificação cruzada.
 
 ### Uso local em outro projeto
 
@@ -596,19 +636,9 @@ O pacote usa `publishConfig.access = public`, necessário para publicar um pacot
 
 ---
 
-## Divulgação e exemplos
+## Exemplos
 
-- Exemplos copiáveis ficam em [`examples/`](./examples).
-- Material de lançamento, mensagens para redes e prompt de landing page ficam em [`docs/launch.md`](./docs/launch.md).
-
----
-
-## Assistente GPT
-
-Para criar um GPT que ajude outros devs a implementar e documentar esta SDK, use:
-
-- [`docs/gpt-assistant.md`](./docs/gpt-assistant.md): configuracao completa do GPT, instrucoes copiaveis, starters e testes de preview.
-- [`docs/gpt-knowledge.md`](./docs/gpt-knowledge.md): resumo compacto para subir como arquivo de Knowledge.
+Exemplos copiáveis ficam em [`examples/`](./examples).
 
 ---
 

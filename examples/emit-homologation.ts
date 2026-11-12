@@ -1,11 +1,10 @@
-import { EmitirNotaError, emitirNfse, loadPfx } from '@useinvio/nfse-sdk';
+import { EmitirNotaError, emitirNfse, NfseCertificate } from '@useinvio/nfse-sdk';
 import { nationalInvoice } from './payloads.js';
 
-const pfx = loadPfx('./certificado.pfx', process.env.PFX_PASSWORD!);
-
+const certificate = NfseCertificate.fromEnv(); // NFSE_CERT_PATH + NFSE_CERT_PASSWORD
 
 try {
-  const resultado = await emitirNfse(nationalInvoice, pfx);
+  const resultado = await emitirNfse(nationalInvoice, certificate);
   console.log(resultado.chaveAcesso);
   console.log(resultado.nfseXml);
 } catch (error) {

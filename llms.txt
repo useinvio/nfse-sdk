@@ -20,7 +20,8 @@ It is not a fiscal decision engine. Do not infer tax codes, accounting rules, te
 - `emitirNfse(input, pfx, options?)`: issue an invoice from a DPS XML string or `DpsJsonRequest`.
 - `buildDpsFromJson(input)`: build unsigned DPS XML from declarative JSON.
 - `buildDpsId(prestador, nDPS, serie?)`: derive the 45-character DPS Id.
-- `loadPfx(...)` and `loadPfxFromBuffer(...)`: extract key/certificate material from an A1/PFX certificate.
+- `NfseCertificate`: opaque A1 certificate for signing and mTLS (`fromEnv`, `fromFile`, `fromBase64`, `fromPfx`, `fromPem`). Exposes only metadata (CNPJ/CPF, validity, fingerprint); the private key lives outside the object and never appears in logs or JSON. Env convention: `NFSE_CERT_PATH` or `NFSE_CERT_BASE64`, plus `NFSE_CERT_PASSWORD` or `NFSE_CERT_PASSWORD_FILE`.
+- `loadPfx(...)` and `loadPfxFromBuffer(...)`: legacy loaders that return the key as PEM; prefer `NfseCertificate`.
 - `consultarNfse(...)`, `enviarEvento(...)`, `extrairErros(...)`: lower-level SEFIN helpers.
 - `setSefinRequestObserver(...)` and `createSefinLatencyTracker(...)`: observe SEFIN round-trip latency when `NFSE_SEFIN_LATENCY_METRICS` is enabled; percentiles require `includePercentiles: true`.
 - `gzipBase64(...)`, `gunzipBase64(...)`, `signDps(...)`, `verifyDps(...)`: protocol utilities for custom flows.
@@ -35,7 +36,9 @@ It is not a fiscal decision engine. Do not infer tax codes, accounting rules, te
 - `fiscalValidation.ts`: structural and layout-oriented validation for the JSON input. This intentionally rejects unsupported or ambiguous fiscal shapes.
 - `sefinClient.ts`: HTTPS mTLS requests to SEFIN, latency observation, response parsing, error normalization, invoice query, issue transport, and event transport.
 - `config.ts`: SEFIN base URLs, environment names, and `tpAmb` mapping.
-- `loadPfx.ts`: PFX/A1 certificate decoding with `node-forge`.
+- `certificate.ts`: `NfseCertificate`, ICP-Brasil CNPJ/CPF extraction, env loading, per-certificate mTLS agent, and the internal `resolveCredentials` used by signing and transport.
+- `loadPfx.ts`: PFX/A1 certificate decoding with `node-forge` (shared parser plus legacy loaders).
+- `xsdValidation.ts`: in-process XSD validation with libxml2 compiled to WebAssembly; schemas compiled once per process.
 - `signXml.ts`: XMLDSIG signing and verification helpers.
 - `gzipB64.ts`: GZip/Base64 helpers.
 - `fiscalDomains.ts`: code domains shared by the validator and the JSON Schema.
@@ -69,7 +72,8 @@ Keep values as strings when they represent fiscal codes, identifiers, decimals, 
 - Currency discrepancies are warnings; explicit values retain priority. Service amounts must remain positive after rounding; all foreign amounts are serialized with two decimals.
 - `validateDpsJsonRequest` returns independent normalized data, errors in `issues`, and non-blocking `warnings`.
 - `EmitirNotaError` covers SEFIN rejection and incomplete/invalid HTTP 2xx authorization responses, including missing/invalid/conflicting 50-digit access keys. Reconcile before retrying; the SDK never retries automatically.
-- `sefinClient.ts` uses PEM key/cert material for mTLS, not the raw PFX in the Node TLS handshake.
+- `sefinClient.ts` uses a per-certificate `https.Agent` (from `NfseCertificate`) or PEM key/cert (legacy `PfxMaterial`) for mTLS, never the raw PFX in the Node TLS handshake. Access keys are validated as 50 digits before any request (`ChaveAcessoInvalidaError`).
+- XSD validation needs no system `xmllint`; it runs in WebAssembly. `XmllintUnavailableError` is a deprecated alias of `XsdEngineUnavailableError`.
 - SEFIN latency metrics are off by default, enabled through `NFSE_SEFIN_LATENCY_METRICS`, and emitted for the external request only; keep them separate from API route latency when integrating observability.
 
 ## Change Guidance for LLMs
@@ -79,7 +83,7 @@ Keep values as strings when they represent fiscal codes, identifiers, decimals, 
 - When adding support for a new NFS-e layout field, update the TypeScript interface, validation rules, JSON Schema (`dpsJsonSchema.ts`), builder output, docs/examples, and tests together.
 - Do not add fiscal assumptions to make examples pass. Required fiscal choices should stay explicit in user input.
 - Be careful with XML ordering. The generated order should follow the SEFIN schema, and tests may compare XML snippets.
-- Do not hand-wave certificate handling. PFX content may arrive as a `Buffer` or base64 string.
+- Do not hand-wave certificate handling. Accept `CertificateInput` (`NfseCertificate | PfxMaterial`) and go through `resolveCredentials`; never log, serialize, or return key material, the PFX bytes, or the password.
 - Network calls to SEFIN should stay isolated in `sefinClient.ts` so tests can mock transport boundaries.
 
 ## Useful Commands

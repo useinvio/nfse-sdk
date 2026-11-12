@@ -1,6 +1,6 @@
 import { SignedXml } from 'xml-crypto';
 import { DOMParser } from '@xmldom/xmldom';
-import type { PfxMaterial } from './loadPfx.js';
+import { resolveCredentials, type CertificateInput } from './certificate.js';
 
 // Algoritmos observados nas NFS-e reais do Sistema Nacional.
 // Centralizados aqui para troca fácil caso o ambiente exija variantes.
@@ -24,12 +24,13 @@ export function signEnveloped(
   xml: string,
   refId: string,
   localName: string,
-  pfx: PfxMaterial,
+  certificate: CertificateInput,
 ): string {
+  const credentials = resolveCredentials(certificate);
   const xpath = `//*[local-name(.)='${localName}']`;
   const sig = new SignedXml({
-    privateKey: pfx.privateKeyPem,
-    publicCert: pfx.certPem,
+    privateKey: credentials.privateKey,
+    publicCert: credentials.certPem,
     signatureAlgorithm: SIGNATURE_ALGORITHM,
     canonicalizationAlgorithm: CANON_ALGORITHM,
   });
@@ -43,15 +44,15 @@ export function signEnveloped(
 
   // Emite <KeyInfo> com o certificado do titular.
   sig.getKeyInfoContent = () =>
-    `<X509Data><X509Certificate>${pfx.certDerBase64}</X509Certificate></X509Data>`;
+    `<X509Data><X509Certificate>${credentials.certDerBase64}</X509Certificate></X509Data>`;
 
   sig.computeSignature(xml, { location: { reference: xpath, action: 'after' } });
   return withUtf8XmlDeclaration(sig.getSignedXml());
 }
 
 /** Assina a DPS (referência em infDPS). */
-export function signDps(xml: string, dpsId: string, pfx: PfxMaterial): string {
-  return signEnveloped(xml, dpsId, 'infDPS', pfx);
+export function signDps(xml: string, dpsId: string, certificate: CertificateInput): string {
+  return signEnveloped(xml, dpsId, 'infDPS', certificate);
 }
 
 /** Valida uma DPS assinada usando o certificado fornecido. Útil em testes. */

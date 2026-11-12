@@ -19,7 +19,7 @@ import { consultarNfse, extrairErros, type SefinErro } from './sefinClient.js';
 import { DpsXsdValidationError, validateDpsXmlAgainstXsd } from './xsdValidation.js';
 import type { Ambiente } from './config.js';
 import type { DpsJsonRequest } from './dpsJson.js';
-import type { PfxMaterial } from './loadPfx.js';
+import type { CertificateInput } from './certificate.js';
 
 export { DPS_JSON_REQUEST_SCHEMA } from './dpsJsonSchema.js';
 export type { JsonSchema } from './dpsJsonSchema.js';
@@ -38,8 +38,8 @@ export interface NfseAgentIssue {
 }
 
 export interface NfseAgentContext {
-  /** Host-owned A1 certificate. Required only by tools that talk to SEFIN. */
-  pfx?: PfxMaterial;
+  /** Host-owned A1 certificate (`NfseCertificate` recommended). Required only by tools that talk to SEFIN. */
+  pfx?: CertificateInput;
   /** Host-owned environment. Defaults to `restrita`; tool input cannot override it. */
   ambiente?: Ambiente;
 }
@@ -62,7 +62,7 @@ export interface NfseAgentTool<Input = any, Output = any> {
   requiresCertificate: boolean;
   /**
    * Expected failures (invalid input, rejection, missing certificate) resolve
-   * with `issues`. Infrastructure failures (xmllint, network) reject.
+   * with `issues`. Infrastructure failures (XSD engine, network) reject.
    */
   run(input: Input, context?: NfseAgentContext): Promise<Output>;
 }
@@ -120,7 +120,7 @@ function sefinIssue(erro: SefinErro): NfseAgentIssue {
 
 /**
  * Converts known SDK errors to `NfseAgentIssue[]`. Returns `undefined` for
- * anything else (transport, xmllint, programming errors) so the caller can rethrow.
+ * anything else (transport, XSD engine, programming errors) so the caller can rethrow.
  */
 export function toAgentIssues(error: unknown): NfseAgentIssue[] | undefined {
   if (error instanceof DpsFiscalValidationError) return error.issues.map(fromValidationIssue);

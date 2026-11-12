@@ -6,10 +6,10 @@ import { extrairErros, transmitirDpsCompactada } from './sefinClient.js';
 import { gzipBase64, gunzipBase64 } from './gzipB64.js';
 import { signDps } from './signXml.js';
 import { verifyDps } from './signXml.js';
-import { validateDpsXmlAgainstXsd, XmllintUnavailableError } from './xsdValidation.js';
+import { validateDpsXmlAgainstXsd, XsdEngineUnavailableError } from './xsdValidation.js';
 import type { Ambiente } from './config.js';
 import type { DpsJsonRequest } from './dpsJson.js';
-import type { PfxMaterial } from './loadPfx.js';
+import { resolveCredentials, type CertificateInput } from './certificate.js';
 import type { SefinErro } from './sefinClient.js';
 
 export type NotaInput = DpsJsonRequest | string;
@@ -58,7 +58,7 @@ function extractDpsId(xml: string): string | undefined {
 
 export function prepararNota(
   input: NotaInput,
-  pfx: PfxMaterial,
+  pfx: CertificateInput,
   options: EmitirNotaOptions = {},
 ): NotaPreparada {
   let ambiente: Ambiente;
@@ -83,7 +83,7 @@ export function prepararNota(
   validateDpsXmlAgainstXsd(unsignedXml);
   assertCertificateValidity(pfx);
   const signedXml = signDps(unsignedXml, dpsId, pfx);
-  if (!verifyDps(signedXml, pfx.certPem)) {
+  if (!verifyDps(signedXml, resolveCredentials(pfx).certPem)) {
     throw new Error('A assinatura XML da DPS nao pode ser verificada.');
   }
   return { ambiente, dpsId, unsignedXml, signedXml };
@@ -92,7 +92,7 @@ export function prepararNota(
 /** Sends an already validated, signed and persistable DPS. */
 export async function transmitirNotaPreparada(
   nota: NotaPreparada,
-  pfx: PfxMaterial,
+  pfx: CertificateInput,
 ): Promise<ResultadoEmissaoNota> {
   assertEnvironment(dpsEnvironment(nota.signedXml), nota.ambiente);
   assertCertificateValidity(pfx);
@@ -106,7 +106,7 @@ export async function transmitirNotaPreparada(
       const chaveAcesso = authorizedAccessKey(nfseXml, body);
       return { chaveAcesso, dpsId: nota.dpsId, nfseXml, status, body };
     } catch (error) {
-      if (error instanceof XmllintUnavailableError) throw error;
+      if (error instanceof XsdEngineUnavailableError) throw error;
       const message = error instanceof Error ? error.message : String(error);
       throw new EmitirNotaError(`Resposta de autorizacao invalida (HTTP ${status}): ${message}`, status,
         [{ Codigo: 'INVALID_AUTHORIZATION_RESPONSE', Descricao: message }], nota.dpsId, body);
@@ -129,7 +129,7 @@ export async function transmitirNotaPreparada(
  */
 export async function emitirNfse(
   input: NotaInput,
-  pfx: PfxMaterial,
+  pfx: CertificateInput,
   options: EmitirNotaOptions = {},
 ): Promise<ResultadoEmissaoNota> {
   return transmitirNotaPreparada(prepararNota(input, pfx, options), pfx);
