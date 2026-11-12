@@ -35,7 +35,11 @@ The SDK handles the protocol layer: A1 certificates, DPS assembly, structural va
 - [Inspect XML Before Sending](#inspect-xml-before-sending)
 - [Handle SEFIN Rejections](#handle-sefin-rejections)
 - [Query an Issued NFS-e](#query-an-issued-nfs-e)
-- [Send Events](#send-events)
+- [Recover an Emission After a Timeout](#recover-an-emission-after-a-timeout)
+- [Cancel an NFS-e](#cancel-an-nfs-e)
+- [DANFSe (PDF)](#danfse-pdf)
+- [Distribution and Municipal Parameters (ADN)](#distribution-and-municipal-parameters-adn)
+- [Timeouts and Retries](#timeouts-and-retries)
 - [DPS Series and Number](#dps-series-and-number)
 - [Environments](#environments)
 - [AI Agents and MCP](#ai-agents-and-mcp)
@@ -420,31 +424,103 @@ try {
 ## Query an Issued NFS-e
 
 ```ts
-import { consultarNfse } from '@useinvio/nfse-sdk';
+import { ConsultaNfseError, obterNfse } from '@useinvio/nfse-sdk';
 
-const response = await consultarNfse(chaveAcesso, certificate, 'restrita');
+try {
+  const nfse = await obterNfse(chaveAcesso, certificate, 'restrita');
+  console.log(nfse.resumo.nNFSe, nfse.resumo.cStat, nfse.resumo.valores.vLiq);
+  console.log(nfse.nfseXml); // authorized XML, already decompressed
+} catch (error) {
+  if (error instanceof ConsultaNfseError && error.notFound) console.log('No such NFS-e in this environment');
+  else throw error;
+}
+```
 
-if (response.status === 200) {
-  console.log(response.body);
-} else {
-  console.error('Query failed:', response.status, response.body);
+`resumo` holds the number, status, issuer, customer, source DPS and amounts.
+Use `lerNfse(xml)` for XML you already have, or `client.invoices.retrieve(key)`.
+The raw response is still available from `consultarNfse(...)` / `client.invoices.get(...)`.
+
+---
+
+## Recover an Emission After a Timeout
+
+`POST /nfse` is not idempotent, so the SDK **never** retries an emission. If the
+connection drops without an answer, ask SEFIN whether the DPS was processed first:
+
+```ts
+import { prepararNota, recuperarNfsePorDps, transmitirNotaPreparada } from '@useinvio/nfse-sdk';
+
+const prepared = prepararNota(dps, certificate); // persist prepared.dpsId and signedXml first
+try {
+  return await transmitirNotaPreparada(prepared, certificate, { timeoutMs: 30_000 });
+} catch (error) {
+  if (error instanceof Error && error.name === 'EmitirNotaError') throw error; // real rejection
+  const existing = await recuperarNfsePorDps(prepared.dpsId, certificate, prepared.ambiente, { retries: 3 });
+  return existing ?? transmitirNotaPreparada(prepared, certificate); // null: never reached SEFIN
 }
 ```
 
 ---
 
-## Send Events
-
-For example, to send a cancellation event:
+## Cancel an NFS-e
 
 ```ts
-import { enviarEvento, gzipBase64, signEnveloped } from '@useinvio/nfse-sdk';
+import { cancelarNfse, RegistrarEventoError } from '@useinvio/nfse-sdk';
 
-const signedEventXml = signEnveloped(pedRegXml, pedRegId, 'infPedReg', certificate);
-const pedRegXmlGZipB64 = gzipBase64(signedEventXml);
-
-const response = await enviarEvento(pedRegXmlGZipB64, certificate, chaveAcesso, 'restrita');
+try {
+  const event = await cancelarNfse(
+    {
+      ambiente: 'restrita',
+      chaveAcesso,
+      cMotivo: '1', // 1 = issuing error, 2 = service not provided, 9 = other
+      xMotivo: 'Nota emitida com valor incorreto', // 15 to 255 characters
+      // autor defaults to the certificate holder's CNPJ/CPF
+    },
+    certificate,
+  );
+  console.log(event.pedRegEventoId, event.eventoXml);
+} catch (error) {
+  if (error instanceof RegistrarEventoError) console.error(error.status, error.erros);
+  else throw error;
+}
 ```
+
+The SDK builds the v1.01 `pedRegEvento`, validates it against the official XSD,
+signs `infPedReg`, compresses it and sends `pedidoRegistroEventoXmlGZipB64`. For
+substitution (e105102), issue the replacement first, then call
+`cancelarNfsePorSubstituicao({ chaveAcesso, chaveSubstituta, cMotivo: '01' }, certificate)`.
+Query events with `consultarEvento` (SEFIN) or `consultarEventosPorChaveAdn` (ADN).
+
+---
+
+## DANFSe (PDF)
+
+```ts
+import { baixarDanfse } from '@useinvio/nfse-sdk';
+
+const danfse = await baixarDanfse(chaveAcesso, certificate, 'restrita');
+if (danfse.pdf) await writeFile(`danfse-${chaveAcesso}.pdf`, danfse.pdf);
+```
+
+---
+
+## Distribution and Municipal Parameters (ADN)
+
+`distribuirDfePorNsu`, `consultarEventosPorChaveAdn`, `consultarConvenio`,
+`consultarAliquota`, `consultarHistoricoAliquotas`, `consultarRegimesEspeciais`,
+`consultarRetencoes` and `consultarBeneficio` call the National Data Environment
+(ADN). Path parameters are validated before any network call
+(`SefinParametroInvalidoError`). On the client: `client.distribution.byNsu(...)` and
+`client.municipalParameters.*`.
+
+---
+
+## Timeouts and Retries
+
+Every network function accepts `{ timeoutMs, retries, signal }` (defaults: 60 s, 0
+retries). `retries` only applies to GETs (network errors and HTTP 429/502/503/504,
+with exponential backoff). Emission and events are never retried. Set them once
+with `new NfseClient({ ..., request: { timeoutMs: 30_000, retries: 2 } })`.
 
 ---
 
@@ -479,10 +555,10 @@ The official Web Issuer may use series such as `70000`. For API issuing, use an 
 
 ## Environments
 
-| Key | URL |
-|---|---|
-| `restrita` | `https://sefin.producaorestrita.nfse.gov.br/SefinNacional` |
-| `producao` | `https://sefin.nfse.gov.br/SefinNacional` |
+| Key | SEFIN (issue, query, events) | ADN (DANFSe, distribution, parameters) |
+|---|---|---|
+| `restrita` | `https://sefin.producaorestrita.nfse.gov.br/SefinNacional` | `https://adn.producaorestrita.nfse.gov.br` |
+| `producao` | `https://sefin.nfse.gov.br/SefinNacional` | `https://adn.nfse.gov.br` |
 
 ```ts
 import { resolveSefinBaseUrl } from '@useinvio/nfse-sdk';
@@ -536,8 +612,15 @@ Issuing is not exposed as a tool yet: it will require explicit confirmation befo
 |---|---|
 | `new NfseClient(options)` | Creates a client with environment, certificate, and JSON-shaped defaults. |
 | `emitirNfse(input, certificate, options?)` | Issues an NFS-e from XML or JSON and returns `ResultadoEmissaoNota`. |
-| `consultarNfse(chaveAcesso, certificate, ambiente?)` | Queries an NFS-e by access key. |
-| `enviarEvento(xmlGzipB64, certificate, chaveAcesso, ambiente?)` | Sends a fiscal event such as cancellation. |
+| `obterNfse(chaveAcesso, certificate, ambiente?, options?)` | Queries an NFS-e and returns decompressed XML plus a typed `resumo`. |
+| `recuperarNfsePorDps(dpsId, certificate, ambiente?, options?)` | Recovers the NFS-e of a DPS after a timeout; `null` if none. |
+| `cancelarNfse(input, certificate, options?)` | Cancels an NFS-e (e101101). |
+| `cancelarNfsePorSubstituicao(input, certificate, options?)` | Cancels by substitution (e105102). |
+| `baixarDanfse(chaveAcesso, certificate, ambiente?, options?)` | Downloads the DANFSe PDF (ADN). |
+| `consultarNfse(chaveAcesso, certificate, ambiente?, options?)` | Raw query: `{ status, body }`. |
+| `consultarDps(dpsId, certificate, ambiente?, options?)` | Raw `GET /dps/{id}`. |
+| `consultarEvento(key, tpEvento, certificate, ambiente?, { nSeqEvento? })` | Queries a registered event. |
+| `enviarEvento(xmlGzipB64, certificate, chaveAcesso, ambiente?)` | Sends an already signed and compressed event request. |
 | `buildDpsFromJson(invoice)` | Builds DPS XML without signing or sending it. |
 | `setSefinRequestObserver(observer)` | Registers a hook for SEFIN call latency/status observations. |
 | `createSefinLatencyTracker(options?)` | Aggregates recent samples and can calculate percentiles when `includePercentiles` is enabled. |
@@ -562,7 +645,7 @@ Issuing is not exposed as a tool yet: it will require explicit confirmation befo
 | `gzipBase64(xml)` | Compresses XML with GZip and encodes it as Base64. |
 | `gunzipBase64(b64)` | Decodes and decompresses a GZip/Base64 payload. |
 | `extrairErros(body)` | Normalizes official SEFIN errors from a response body. |
-| `resolveSefinBaseUrl(ambiente)` | Returns the base URL for an environment. |
+| `resolveSefinBaseUrl(ambiente)` / `resolveAdnBaseUrl(ambiente)` | Return the base URLs for an environment. |
 
 ### Exported Types
 

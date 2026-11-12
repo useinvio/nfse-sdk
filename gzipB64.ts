@@ -13,3 +13,15 @@ export function gzipBase64(xml: string): string {
 export function gunzipBase64(b64: string): string {
   return gunzipSync(Buffer.from(b64, 'base64'), { maxOutputLength: MAX_GUNZIP_OUTPUT_BYTES }).toString('utf-8');
 }
+
+/**
+ * Decodes documents returned by event queries and ADN distribution, which arrive
+ * either as Base64(GZip) or as Base64(Base64(GZip)).
+ */
+export function gunzipBase64Flexivel(b64: string): string {
+  try {
+    return gunzipBase64(b64);
+  } catch {
+    return gunzipBase64(Buffer.from(b64, 'base64').toString('utf-8'));
+  }
+}

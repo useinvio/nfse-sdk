@@ -4,6 +4,46 @@ Todas as mudancas relevantes deste pacote sao documentadas aqui. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa
 [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [3.2.0] - nao publicado
+
+### Added
+
+- Cancelamento de NFS-e: `cancelarNfse` (e101101) e `cancelarNfsePorSubstituicao`
+  (e105102). O pedido e montado, validado contra o XSD oficial `pedRegEvento`,
+  assinado e enviado. `autor` usa o CNPJ/CPF do titular do certificado por
+  padrao. Builders: `buildCancelamentoFromJson`,
+  `buildCancelamentoPorSubstituicaoFromJson`, `buildPedRegEventoId`, mais as
+  tabelas `TP_EVENTO`, `MOTIVO_CANCELAMENTO`, `MOTIVO_SUBSTITUICAO` e os erros
+  `RegistrarEventoError` e `EventoInvalidoError`.
+- Consulta tipada: `obterNfse` devolve o XML descompactado e um `resumo` tipado
+  (`NfseResumo`). `lerNfse(xml)` le um XML que voce ja tem. Falhas geram
+  `ConsultaNfseError`, com `notFound` para HTTP 404.
+- Recuperacao de emissao: `recuperarNfsePorDps(dpsId)` usa `GET /dps/{id}` e
+  depois `GET /nfse/{chave}` para descobrir se uma DPS foi processada apos um
+  timeout, sem reenviar. A forma crua e `consultarDps`.
+- `consultarEvento` (`GET /nfse/{chave}/eventos/{tpEvento}/{nSeqEvento}`).
+- Ambiente de Dados Nacional (ADN): `baixarDanfse` (PDF do DANFSe),
+  `distribuirDfePorNsu`, `consultarEventosPorChaveAdn` e parametros municipais
+  (`consultarConvenio`, `consultarAliquota`, `consultarHistoricoAliquotas`,
+  `consultarRegimesEspeciais`, `consultarRetencoes`, `consultarBeneficio`).
+  Tambem `ADN_BASE_URL` e `resolveAdnBaseUrl`.
+- `SefinRequestOptions` (`timeoutMs`, `retries`, `signal`) em todas as funcoes
+  de rede e em `NfseClient({ request })`. `retries` vale so para GETs (erro de
+  rede, HTTP 429/502/503/504), com backoff exponencial. Emissao e eventos nunca
+  sao repetidos.
+- `NfseClient`: `invoices.retrieve`, `getByDpsId`, `recover`, `cancel`,
+  `cancelBySubstitution` e `danfse`, alem de `events`, `distribution` e
+  `municipalParameters`.
+- `validatePedRegEventoXmlAgainstXsd` e `PedRegEventoXsdValidationError`.
+- `SefinParametroInvalidoError`: Id da DPS, tipo de evento, NSU, codigo de
+  municipio e demais parametros de caminho sao validados antes da rede.
+- `gunzipBase64Flexivel` para respostas em Base64 simples ou duplo.
+
+### Fixed
+
+- `enviarEvento` agora envia o campo oficial `pedidoRegistroEventoXmlGZipB64`.
+  Antes enviava `pedRegXmlGZipB64`, que a SEFIN nao reconhece.
+
 ## [3.1.0] - nao publicado
 
 ### Added
@@ -83,6 +123,7 @@ em [docs/CORRECOES_EMISSAO.md](docs/CORRECOES_EMISSAO.md).
 
 Versoes anteriores: veja as [releases no GitHub](https://github.com/useinvio/nfse-sdk/releases).
 
+[3.2.0]: https://github.com/useinvio/nfse-sdk/compare/3.0.0...HEAD
 [3.1.0]: https://github.com/useinvio/nfse-sdk/compare/3.0.0...HEAD
 [3.0.0]: https://github.com/useinvio/nfse-sdk/releases/tag/3.0.0
 [2.2.0]: https://github.com/useinvio/nfse-sdk/releases/tag/2.2.0

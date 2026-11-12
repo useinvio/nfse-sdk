@@ -2,6 +2,7 @@ import { DEFAULT_AMBIENTE, TP_AMB } from './config.js';
 import { DpsFiscalValidationError, validateDpsJsonRequest } from './fiscalValidation.js';
 import { fixedDecimal, mulDecimal } from './decimal.js';
 import { resolveValores } from './dpsNormalization.js';
+import { el, nowSaoPauloOffset, onlyDigits, pad, requiredTextEl, textEl } from './xmlBuild.js';
 import type { Ambiente } from './config.js';
 
 const NS = 'http://www.sped.fazenda.gov.br/nfse';
@@ -186,58 +187,11 @@ export interface BuiltDps {
   xml: string;
 }
 
-function escapeXml(value: string | number): string {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function escapeAttr(value: string | number): string {
-  return escapeXml(value).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-}
-
-function attrs(values: Record<string, string>): string {
-  return Object.entries(values)
-    .map(([key, value]) => ` ${key}="${escapeAttr(value)}"`)
-    .join('');
-}
-
-function el(name: string, content: string, attrValues: Record<string, string> = {}): string {
-  return `<${name}${attrs(attrValues)}>${content}</${name}>`;
-}
-
-function textEl(name: string, value: string | number | undefined | null): string {
-  if (value === undefined || value === null || value === '') return '';
-  return el(name, escapeXml(value));
-}
-
-function requiredTextEl(name: string, value: string | number | undefined | null): string {
-  if (value === undefined || value === null || value === '') {
-    throw new Error(`Campo obrigatorio ausente: ${name}`);
-  }
-  return el(name, escapeXml(value));
-}
-
-function onlyDigits(value: string): string {
-  return value.replace(/\D/g, '');
-}
-
-function pad(value: string, length: number): string {
-  return onlyDigits(value).padStart(length, '0');
-}
 
 const roundMoney = fixedDecimal;
 const roundRate = fixedDecimal;
 const roundTaxBurdenRate = fixedDecimal;
 
-function nowSaoPauloOffset(date = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-  }).formatToParts(date).reduce<Record<string, string>>((result, part) => ({ ...result, [part.type]: part.value }), {});
-  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}-03:00`;
-}
 
 function resolveVServ(input: DpsJsonInput): string {
   const { vServ, vServMoeda, cotacao } = resolveValores(input);
