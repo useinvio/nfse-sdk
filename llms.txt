@@ -1,6 +1,6 @@
 # @useinvio/nfse-sdk LLM Guide
 
-This is a TypeScript SDK for Brazil's NFS-e Nacional (SEFIN). It handles the protocol layer for issuing and querying national service invoices: DPS JSON/XML generation, XMLDSIG signing, GZip/Base64 compression, mTLS transport, and structured SEFIN rejection extraction.
+This is a TypeScript SDK for Brazil's NFS-e Nacional (SEFIN). It handles the protocol layer for issuing, querying and cancelling national service invoices: DPS and event JSON/XML generation, XSD validation, XMLDSIG signing, GZip/Base64 compression, mTLS transport to SEFIN and the ADN (DANFSe, distribution, municipal parameters), and structured rejection extraction.
 
 It is not a fiscal decision engine. Do not infer tax codes, accounting rules, tenant state, invoice numbering policy, or legal advice from this SDK.
 
@@ -16,13 +16,18 @@ It is not a fiscal decision engine. Do not infer tax codes, accounting rules, te
 
 ## Public Entry Points
 
-- `NfseClient`: resource-oriented client. Configure certificate, environment, and defaults once, then use `client.invoices.create(...)`, `client.invoices.buildDpsJson(...)`, and `client.invoices.get(...)`.
+- `NfseClient`: resource-oriented client. Configure certificate, environment, and defaults once, then use `client.invoices.create/buildDpsJson/get/retrieve/getByDpsId/recover/cancel/cancelBySubstitution/danfse`, `client.events.get/listByAccessKey`, `client.distribution.byNsu` and `client.municipalParameters.*`. `request: { timeoutMs, retries }` applies to every call.
 - `emitirNfse(input, pfx, options?)`: issue an invoice from a DPS XML string or `DpsJsonRequest`.
 - `buildDpsFromJson(input)`: build unsigned DPS XML from declarative JSON.
 - `buildDpsId(prestador, nDPS, serie?)`: derive the 45-character DPS Id.
 - `NfseCertificate`: opaque A1 certificate for signing and mTLS (`fromEnv`, `fromFile`, `fromBase64`, `fromPfx`, `fromPem`). Exposes only metadata (CNPJ/CPF, validity, fingerprint); the private key lives outside the object and never appears in logs or JSON. Env convention: `NFSE_CERT_PATH` or `NFSE_CERT_BASE64`, plus `NFSE_CERT_PASSWORD` or `NFSE_CERT_PASSWORD_FILE`.
 - `loadPfx(...)` and `loadPfxFromBuffer(...)`: legacy loaders that return the key as PEM; prefer `NfseCertificate`.
-- `consultarNfse(...)`, `enviarEvento(...)`, `extrairErros(...)`: lower-level SEFIN helpers.
+- `obterNfse(key, cert, ambiente?)`: GET /nfse/{key} decoded to `{ nfseXml, resumo }` (typed `NfseResumo`); throws `ConsultaNfseError` (`notFound` for 404). `lerNfse(xml)` reads XML you already have.
+- `recuperarNfsePorDps(dpsId, cert, ambiente?)`: after an emission timeout, GET /dps/{id} then GET /nfse/{key}; `null` means SEFIN never processed the DPS and it is safe to send the same signed DPS again.
+- `cancelarNfse(...)` (e101101) and `cancelarNfsePorSubstituicao(...)` (e105102): build, XSD-validate, sign and send the event. `autor` defaults to the certificate holder. Builders: `buildCancelamentoFromJson`, `buildCancelamentoPorSubstituicaoFromJson`; rejection: `RegistrarEventoError`.
+- `baixarDanfse(...)`: DANFSe PDF from the ADN (`GET /danfse/{key}`).
+- `distribuirDfePorNsu`, `consultarEventosPorChaveAdn`, `consultarConvenio`, `consultarAliquota`, `consultarHistoricoAliquotas`, `consultarRegimesEspeciais`, `consultarRetencoes`, `consultarBeneficio`: ADN queries.
+- `consultarNfse(...)`, `consultarDps(...)`, `consultarEvento(...)`, `enviarEvento(...)`, `extrairErros(...)`: lower-level helpers returning raw `{ status, body }`.
 - `setSefinRequestObserver(...)` and `createSefinLatencyTracker(...)`: observe SEFIN round-trip latency when `NFSE_SEFIN_LATENCY_METRICS` is enabled; percentiles require `includePercentiles: true`.
 - `gzipBase64(...)`, `gunzipBase64(...)`, `signDps(...)`, `verifyDps(...)`: protocol utilities for custom flows.
 - `DPS_JSON_REQUEST_SCHEMA`: JSON Schema 2020-12 for the canonical `DpsJsonRequest` (formats and code domains; cross-field rules stay in `validateDpsJsonRequest`).
@@ -34,11 +39,16 @@ It is not a fiscal decision engine. Do not infer tax codes, accounting rules, te
 - `emissaoNota.ts`: central issue flow: prepare input, sign DPS, gzip/base64, transmit, unzip authorized XML, normalize errors.
 - `dpsJson.ts`: JSON-to-DPS XML builder, XML escaping, DPS Id generation, value formatting, and XML block assembly.
 - `fiscalValidation.ts`: structural and layout-oriented validation for the JSON input. This intentionally rejects unsupported or ambiguous fiscal shapes.
-- `sefinClient.ts`: HTTPS mTLS requests to SEFIN, latency observation, response parsing, error normalization, invoice query, issue transport, and event transport.
-- `config.ts`: SEFIN base URLs, environment names, and `tpAmb` mapping.
+- `sefinClient.ts`: HTTPS mTLS requests to SEFIN and ADN, timeouts, GET-only retries, path-parameter validation, latency observation, response parsing, error normalization, and every endpoint function.
+- `eventoJson.ts`: pedRegEvento builders (e101101, e105102) and motive code tables.
+- `eventosNfse.ts`: event flow: XSD-validate, sign `infPedReg`, gzip/base64, send, normalize rejections.
+- `consultas.ts`: typed query (`obterNfse`) and emission recovery (`recuperarNfsePorDps`).
+- `nfseXml.ts`: `lerNfse`, the typed reader for authorized NFS-e XML.
+- `xmlBuild.ts`: XML element/escaping helpers shared by the DPS and event builders.
+- `config.ts`: SEFIN and ADN base URLs, environment names, and `tpAmb` mapping.
 - `certificate.ts`: `NfseCertificate`, ICP-Brasil CNPJ/CPF extraction, env loading, per-certificate mTLS agent, and the internal `resolveCredentials` used by signing and transport.
 - `loadPfx.ts`: PFX/A1 certificate decoding with `node-forge` (shared parser plus legacy loaders).
-- `xsdValidation.ts`: in-process XSD validation with libxml2 compiled to WebAssembly; schemas compiled once per process.
+- `xsdValidation.ts`: in-process XSD validation (DPS and pedRegEvento) with libxml2 compiled to WebAssembly; each schema compiled once per process.
 - `signXml.ts`: XMLDSIG signing and verification helpers.
 - `gzipB64.ts`: GZip/Base64 helpers.
 - `fiscalDomains.ts`: code domains shared by the validator and the JSON Schema.
@@ -71,8 +81,9 @@ Keep values as strings when they represent fiscal codes, identifiers, decimals, 
 - `client.invoices.get(key, { ambiente })` supports an explicit environment; otherwise defaults.ambiente > constructor. It does not remember the last emission.
 - Currency discrepancies are warnings; explicit values retain priority. Service amounts must remain positive after rounding; all foreign amounts are serialized with two decimals.
 - `validateDpsJsonRequest` returns independent normalized data, errors in `issues`, and non-blocking `warnings`.
-- `EmitirNotaError` covers SEFIN rejection and incomplete/invalid HTTP 2xx authorization responses, including missing/invalid/conflicting 50-digit access keys. Reconcile before retrying; the SDK never retries automatically.
-- `sefinClient.ts` uses a per-certificate `https.Agent` (from `NfseCertificate`) or PEM key/cert (legacy `PfxMaterial`) for mTLS, never the raw PFX in the Node TLS handshake. Access keys are validated as 50 digits before any request (`ChaveAcessoInvalidaError`).
+- `EmitirNotaError` covers SEFIN rejection and incomplete/invalid HTTP 2xx authorization responses, including missing/invalid/conflicting 50-digit access keys. Reconcile before retrying (`recuperarNfsePorDps`); the SDK never retries POSTs (emission, events). `retries` only applies to GETs, for network errors and HTTP 429/502/503/504.
+- `sefinClient.ts` uses a per-certificate `https.Agent` (from `NfseCertificate`) or PEM key/cert (legacy `PfxMaterial`) for mTLS, never the raw PFX in the Node TLS handshake. Access keys are validated as 50 digits before any request (`ChaveAcessoInvalidaError`); other path parameters raise `SefinParametroInvalidoError`.
+- The event endpoint body field is `pedidoRegistroEventoXmlGZipB64`.
 - XSD validation needs no system `xmllint`; it runs in WebAssembly. `XmllintUnavailableError` is a deprecated alias of `XsdEngineUnavailableError`.
 - SEFIN latency metrics are off by default, enabled through `NFSE_SEFIN_LATENCY_METRICS`, and emitted for the external request only; keep them separate from API route latency when integrating observability.
 

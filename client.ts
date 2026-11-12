@@ -4,7 +4,31 @@ import type { DpsJsonInput, DpsJsonRequest, PrestadorProfile, ServicoProfile } f
 import { emitirNfse, type ResultadoEmissaoNota } from './emissaoNota.js';
 import { NfseCertificate, type CertificateInput } from './certificate.js';
 import type { PfxMaterial } from './loadPfx.js';
-import { consultarNfse, type SefinResposta } from './sefinClient.js';
+import { obterNfse, recuperarNfsePorDps, type NfseConsultada } from './consultas.js';
+import {
+  cancelarNfse,
+  cancelarNfsePorSubstituicao,
+  type ComAutorOpcional,
+  type ResultadoEvento,
+} from './eventosNfse.js';
+import type { CancelamentoNfseInput, CancelamentoPorSubstituicaoInput } from './eventoJson.js';
+import {
+  baixarDanfse,
+  consultarAliquota,
+  consultarBeneficio,
+  consultarConvenio,
+  consultarDps,
+  consultarEvento,
+  consultarEventosPorChaveAdn,
+  consultarHistoricoAliquotas,
+  consultarNfse,
+  consultarRegimesEspeciais,
+  consultarRetencoes,
+  distribuirDfePorNsu,
+  type DanfseResposta,
+  type SefinRequestOptions,
+  type SefinResposta,
+} from './sefinClient.js';
 
 export type NfseEnvironment = 'sandbox' | 'production' | Ambiente;
 
@@ -28,17 +52,56 @@ export interface GetInvoiceOptions {
   ambiente?: Ambiente;
 }
 
+export type CancelInvoiceInput = ComAutorOpcional<CancelamentoNfseInput>;
+export type CancelBySubstitutionInput = ComAutorOpcional<CancelamentoPorSubstituicaoInput>;
+
 export interface NfseClientOptions {
   environment?: NfseEnvironment;
   /** Prefer `NfseCertificate.fromEnv()` / `fromFile()`; raw PFX content and legacy `PfxMaterial` are also accepted. */
   certificate: NfseCertificateInput | NfseCertificate | PfxMaterial;
   defaults?: NfseClientDpsDefaults;
+  /** Transport options for every call. `retries` only applies to GETs; emission and events are never retried. */
+  request?: SefinRequestOptions;
 }
 
 export interface InvoiceResource {
   create(input: CreateInvoiceInput): Promise<ResultadoEmissaoNota>;
   buildDpsJson(input: CreateInvoiceInput): DpsJsonRequest;
+  /** GET /nfse/{chave}: raw status/body. Prefer `retrieve` for the decoded XML and typed summary. */
   get(chaveAcesso: string, options?: GetInvoiceOptions): Promise<SefinResposta>;
+  /** GET /nfse/{chave}: decompressed XML plus typed summary; throws `ConsultaNfseError` on non-2xx. */
+  retrieve(chaveAcesso: string, options?: GetInvoiceOptions): Promise<NfseConsultada>;
+  /** GET /dps/{id}: raw status/body with the access key generated from a DPS. */
+  getByDpsId(dpsId: string, options?: GetInvoiceOptions): Promise<SefinResposta>;
+  /** Recovers an emission with unknown outcome by DPS Id; `null` means no NFS-e exists for it. */
+  recover(dpsId: string, options?: GetInvoiceOptions): Promise<NfseConsultada | null>;
+  /** Event e101101. `autor` defaults to the certificate holder. */
+  cancel(input: CancelInvoiceInput): Promise<ResultadoEvento>;
+  /** Event e105102. Issue the replacement NFS-e first. */
+  cancelBySubstitution(input: CancelBySubstitutionInput): Promise<ResultadoEvento>;
+  /** ADN GET /danfse/{chave}: the official DANFSe PDF. */
+  danfse(chaveAcesso: string, options?: GetInvoiceOptions): Promise<DanfseResposta>;
+}
+
+export interface EventResource {
+  /** SEFIN GET /nfse/{chave}/eventos/{tpEvento}/{nSeqEvento}. */
+  get(chaveAcesso: string, tpEvento: string, nSeqEvento?: number | string): Promise<SefinResposta>;
+  /** ADN GET /contribuintes/NFSe/{chave}/Eventos. */
+  listByAccessKey(chaveAcesso: string): Promise<SefinResposta>;
+}
+
+export interface DistributionResource {
+  /** ADN GET /contribuintes/DFe/{nsu}: documents issued to or by the certificate holder. */
+  byNsu(nsu: string | number, options?: { cnpjConsulta?: string; lote?: boolean }): Promise<SefinResposta>;
+}
+
+export interface MunicipalParametersResource {
+  agreement(codigoMunicipio: string): Promise<SefinResposta>;
+  rate(codigoMunicipio: string, codigoServico: string, competencia: string): Promise<SefinResposta>;
+  rateHistory(codigoMunicipio: string, codigoServico: string): Promise<SefinResposta>;
+  specialRegimes(codigoMunicipio: string, codigoServico: string, competencia: string): Promise<SefinResposta>;
+  withholdings(codigoMunicipio: string, competencia: string): Promise<SefinResposta>;
+  benefit(codigoMunicipio: string, numeroBeneficio: string, competencia: string): Promise<SefinResposta>;
 }
 
 function resolveEnvironment(environment: NfseEnvironment | undefined): Ambiente {
@@ -73,10 +136,14 @@ function ensureObject<T extends object>(value: T | undefined, field: string): T 
 
 export class NfseClient {
   public readonly invoices: InvoiceResource;
+  public readonly events: EventResource;
+  public readonly distribution: DistributionResource;
+  public readonly municipalParameters: MunicipalParametersResource;
 
   private readonly ambiente: Ambiente;
   private readonly pfx: CertificateInput;
   private readonly defaults: NfseClientDpsDefaults;
+  private readonly request: SefinRequestOptions;
 
   constructor(options: NfseClientOptions) {
     this.ambiente = resolveEnvironment(options.environment);
@@ -85,11 +152,40 @@ export class NfseClient {
       ? certificate
       : NfseCertificate.fromPfx(decodeCertificateContent(certificate), certificate.password);
     this.defaults = options.defaults ?? {};
+    this.request = options.request ?? {};
+    const req = this.request;
+    const amb = (options?: GetInvoiceOptions) => this.resolveAmbiente(options?.ambiente);
     this.invoices = {
       create: (input) => this.createInvoice(input),
       buildDpsJson: (input) => this.buildInvoiceDpsJson(input),
-      get: (chaveAcesso, options) => this.getInvoice(chaveAcesso, options),
+      get: (chaveAcesso, options) => consultarNfse(chaveAcesso, this.pfx, amb(options), req),
+      retrieve: (chaveAcesso, options) => obterNfse(chaveAcesso, this.pfx, amb(options), req),
+      getByDpsId: (dpsId, options) => consultarDps(dpsId, this.pfx, amb(options), req),
+      recover: (dpsId, options) => recuperarNfsePorDps(dpsId, this.pfx, amb(options), req),
+      cancel: (input) => cancelarNfse({ ...input, ambiente: amb(input) }, this.pfx, req),
+      cancelBySubstitution: (input) => cancelarNfsePorSubstituicao({ ...input, ambiente: amb(input) }, this.pfx, req),
+      danfse: (chaveAcesso, options) => baixarDanfse(chaveAcesso, this.pfx, amb(options), req),
     };
+    this.events = {
+      get: (chaveAcesso, tpEvento, nSeqEvento) =>
+        consultarEvento(chaveAcesso, tpEvento, this.pfx, amb(), { ...req, nSeqEvento }),
+      listByAccessKey: (chaveAcesso) => consultarEventosPorChaveAdn(chaveAcesso, this.pfx, amb(), req),
+    };
+    this.distribution = {
+      byNsu: (nsu, options) => distribuirDfePorNsu(nsu, this.pfx, amb(), { ...req, ...options }),
+    };
+    this.municipalParameters = {
+      agreement: (mun) => consultarConvenio(mun, this.pfx, amb(), req),
+      rate: (mun, servico, competencia) => consultarAliquota(mun, servico, competencia, this.pfx, amb(), req),
+      rateHistory: (mun, servico) => consultarHistoricoAliquotas(mun, servico, this.pfx, amb(), req),
+      specialRegimes: (mun, servico, competencia) => consultarRegimesEspeciais(mun, servico, competencia, this.pfx, amb(), req),
+      withholdings: (mun, competencia) => consultarRetencoes(mun, competencia, this.pfx, amb(), req),
+      benefit: (mun, beneficio, competencia) => consultarBeneficio(mun, beneficio, competencia, this.pfx, amb(), req),
+    };
+  }
+
+  private resolveAmbiente(ambiente?: Ambiente): Ambiente {
+    return ambiente ?? this.defaults.ambiente ?? this.ambiente;
   }
 
   private buildInvoiceDpsJson(input: CreateInvoiceInput): DpsJsonRequest {
@@ -116,10 +212,6 @@ export class NfseClient {
 
   private async createInvoice(input: CreateInvoiceInput): Promise<ResultadoEmissaoNota> {
     const dpsJson = this.buildInvoiceDpsJson(input);
-    return emitirNfse(dpsJson, this.pfx, { ambiente: dpsJson.ambiente });
-  }
-
-  private async getInvoice(chaveAcesso: string, options: GetInvoiceOptions = {}): Promise<SefinResposta> {
-    return consultarNfse(chaveAcesso, this.pfx, options.ambiente ?? this.defaults.ambiente ?? this.ambiente);
+    return emitirNfse(dpsJson, this.pfx, { ambiente: dpsJson.ambiente, timeoutMs: this.request.timeoutMs, signal: this.request.signal });
   }
 }

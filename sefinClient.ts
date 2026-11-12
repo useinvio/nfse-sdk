@@ -1,6 +1,6 @@
 import https from 'node:https';
 import { performance } from 'node:perf_hooks';
-import { resolveSefinBaseUrl } from './config.js';
+import { resolveAdnBaseUrl, resolveSefinBaseUrl } from './config.js';
 import { resolveCredentials, type CertificateInput } from './certificate.js';
 import type { Ambiente } from './config.js';
 
@@ -17,9 +17,42 @@ export class ChaveAcessoInvalidaError extends Error {
   }
 }
 
-function assertChaveAcesso(chave: unknown): string {
+export function assertChaveAcesso(chave: unknown): string {
   if (typeof chave !== 'string' || !/^\d{50}$/.test(chave)) throw new ChaveAcessoInvalidaError(String(chave));
   return chave;
+}
+
+/** A path parameter has the wrong format; raised before any network I/O. */
+export class SefinParametroInvalidoError extends Error {
+  readonly code = 'SEFIN_PARAMETER_INVALID';
+  constructor(public readonly field: string, public readonly value: string, expected: string) {
+    super(`${field} invalido: esperado ${expected}.`);
+    this.name = 'SefinParametroInvalidoError';
+  }
+}
+
+function assertSegment(field: string, value: unknown, pattern: RegExp, expected: string): string {
+  const text = typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : value;
+  if (typeof text !== 'string' || !pattern.test(text)) throw new SefinParametroInvalidoError(field, String(value), expected);
+  return text;
+}
+
+/** Id da DPS (TSIdDPS): "DPS" + 42 digitos. */
+export function assertDpsId(dpsId: unknown): string {
+  return assertSegment('dpsId', dpsId, /^DPS\d{42}$/, '"DPS" seguido de 42 digitos');
+}
+
+export interface SefinRequestOptions {
+  /** Timeout por requisicao em ms. Default: 60000. */
+  timeoutMs?: number;
+  /**
+   * Novas tentativas com backoff exponencial para falhas transitorias (erro de
+   * rede, HTTP 429/502/503/504). Aplicado somente a GETs, que sao idempotentes:
+   * emissao e eventos nunca sao repetidos automaticamente. Default: 0.
+   */
+  retries?: number;
+  /** Cancela a requisicao (e as novas tentativas pendentes). */
+  signal?: AbortSignal;
 }
 
 export interface SefinErro {
@@ -34,7 +67,16 @@ export interface SefinResposta {
   body: any;
 }
 
-export type SefinOperation = 'transmitir_dps' | 'consultar_nfse' | 'enviar_evento';
+export type SefinOperation =
+  | 'transmitir_dps'
+  | 'consultar_nfse'
+  | 'consultar_dps'
+  | 'enviar_evento'
+  | 'consultar_evento'
+  | 'baixar_danfse'
+  | 'adn_distribuicao_nsu'
+  | 'adn_eventos_chave'
+  | 'adn_parametros_municipais';
 
 export interface SefinRequestMetric {
   operation: SefinOperation;
@@ -97,6 +139,8 @@ interface RequestOpts {
   /** Caminho relativo à base do SefinNacional, ex.: "/nfse" ou "/nfse/<chave>" */
   path: string;
   jsonBody?: unknown;
+  /** Header Accept. Default: application/json. */
+  accept?: string;
 }
 
 interface RequestMetricOpts {
@@ -224,12 +268,14 @@ function sefinRequest(
   certificate: CertificateInput,
   metricOpts: RequestMetricOpts,
   baseOverride?: string,
+  requestOptions: SefinRequestOptions = {},
 ): Promise<SefinRespostaRaw> {
   const url = new URL(`${baseOverride ?? resolveSefinBaseUrl()}${opts.path}`);
+  const timeoutMs = requestOptions.timeoutMs ?? SEFIN_REQUEST_TIMEOUT_MS;
   const payload = opts.jsonBody != null ? JSON.stringify(opts.jsonBody) : undefined;
 
   const headers: Record<string, string | number> = {
-    Accept: 'application/json',
+    Accept: opts.accept ?? 'application/json',
   };
   if (payload != null) {
     headers['Content-Type'] = 'application/json';
@@ -244,7 +290,8 @@ function sefinRequest(
     headers,
     ...resolveCredentials(certificate).tls,
     rejectUnauthorized: true,
-    timeout: SEFIN_REQUEST_TIMEOUT_MS,
+    timeout: timeoutMs,
+    ...(requestOptions.signal ? { signal: requestOptions.signal } : {}),
   };
 
   return new Promise((resolve, reject) => {
@@ -292,11 +339,55 @@ function sefinRequest(
       reject(error);
     });
     req.on('timeout', () => {
-      req.destroy(new Error(`SEFIN request timed out after ${SEFIN_REQUEST_TIMEOUT_MS}ms`));
+      req.destroy(new Error(`SEFIN request timed out after ${timeoutMs}ms`));
     });
     if (payload != null) req.write(payload);
     req.end();
   });
+}
+
+const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
+
+function retryDelayMs(attempt: number): number {
+  const base = Math.min(4_000, 500 * 2 ** attempt);
+  return base / 2 + Math.random() * (base / 2);
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(signal.reason); return; }
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
+    const onAbort = () => { clearTimeout(timer); reject(signal!.reason); };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * Executes the request, retrying transient failures. Only GETs are retried:
+ * emission and event POSTs are not idempotent and must never be resent blindly
+ * (recover a timed-out emission with `consultarDps`).
+ */
+async function sefinRequestWithRetry(
+  opts: RequestOpts,
+  certificate: CertificateInput,
+  metricOpts: RequestMetricOpts,
+  baseOverride: string | undefined,
+  requestOptions: SefinRequestOptions = {},
+): Promise<SefinRespostaRaw> {
+  const retries = opts.method === 'GET' ? Math.max(0, Math.floor(requestOptions.retries ?? 0)) : 0;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const res = await sefinRequest(opts, certificate, metricOpts, baseOverride, requestOptions);
+      if (attempt < retries && RETRYABLE_STATUS.has(res.status)) {
+        await sleep(retryDelayMs(attempt), requestOptions.signal);
+        continue;
+      }
+      return res;
+    } catch (error) {
+      if (attempt >= retries || requestOptions.signal?.aborted) throw error;
+      await sleep(retryDelayMs(attempt), requestOptions.signal);
+    }
+  }
 }
 
 /** Parseia o corpo como JSON; mantém texto cru se não for JSON (ex.: 403 HTML). */
@@ -352,52 +443,334 @@ export function extrairErros(body: any): SefinErro[] {
   ];
 }
 
-/** SefinNacional · POST /nfse — transporte baixo nivel de DPS ja compactada em GZip+Base64. */
+function sefinBase(ambiente?: Ambiente): string | undefined {
+  return ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
+}
+
+/** SefinNacional · POST /nfse — transporte baixo nivel de DPS ja compactada em GZip+Base64. Nunca repetido automaticamente. */
 export async function transmitirDpsCompactada(
   dpsXmlGZipB64: string,
   pfx: CertificateInput,
   ambiente?: Ambiente,
+  options?: SefinRequestOptions,
 ): Promise<SefinResposta> {
-  const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
-  return parseJson(await sefinRequest(
+  return parseJson(await sefinRequestWithRetry(
     { method: 'POST', path: '/nfse', jsonBody: { dpsXmlGZipB64 } },
     pfx,
     { operation: 'transmitir_dps', ambiente, pathTemplate: '/nfse' },
-    base,
+    sefinBase(ambiente),
+    options,
   ));
 }
 
 /** SefinNacional · GET /nfse/{chave} — consulta a NFS-e pela chave de acesso (50 dígitos). */
-export async function consultarNfse(chave: string, pfx: CertificateInput, ambiente?: Ambiente): Promise<SefinResposta> {
+export async function consultarNfse(
+  chave: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
   assertChaveAcesso(chave);
-  const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
-  return parseJson(await sefinRequest(
+  return parseJson(await sefinRequestWithRetry(
     { method: 'GET', path: `/nfse/${chave}` },
     pfx,
     { operation: 'consultar_nfse', ambiente, pathTemplate: '/nfse/{chave}' },
-    base,
+    sefinBase(ambiente),
+    options,
   ));
 }
 
-/** SefinNacional · POST /nfse/{chave}/eventos — registra evento fiscal da NFS-e. */
+/**
+ * SefinNacional · GET /dps/{id} — recupera a chave de acesso da NFS-e gerada a
+ * partir de uma DPS. Use para recuperar uma emissao que sofreu timeout em vez
+ * de reenviar a DPS.
+ */
+export async function consultarDps(
+  dpsId: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  assertDpsId(dpsId);
+  return parseJson(await sefinRequestWithRetry(
+    { method: 'GET', path: `/dps/${dpsId}` },
+    pfx,
+    { operation: 'consultar_dps', ambiente, pathTemplate: '/dps/{id}' },
+    sefinBase(ambiente),
+    options,
+  ));
+}
+
+/**
+ * SefinNacional · POST /nfse/{chave}/eventos — registra evento fiscal da NFS-e.
+ * O corpo usa o campo oficial `pedidoRegistroEventoXmlGZipB64`. Nunca repetido automaticamente.
+ */
 export async function enviarEvento(
-  pedRegXmlGZipB64: string,
+  pedidoRegistroEventoXmlGZipB64: string,
   pfx: CertificateInput,
   chaveAcesso: string,
   ambiente?: Ambiente,
+  options?: SefinRequestOptions,
 ): Promise<SefinResposta> {
   assertChaveAcesso(chaveAcesso);
-  const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
-  return parseJson(
-    await sefinRequest(
-      {
-        method: 'POST',
-        path: `/nfse/${chaveAcesso}/eventos`,
-        jsonBody: { pedRegXmlGZipB64 },
-      },
-      pfx,
-      { operation: 'enviar_evento', ambiente, pathTemplate: '/nfse/{chave}/eventos' },
-      base,
-    ),
+  return parseJson(await sefinRequestWithRetry(
+    {
+      method: 'POST',
+      path: `/nfse/${chaveAcesso}/eventos`,
+      jsonBody: { pedidoRegistroEventoXmlGZipB64 },
+    },
+    pfx,
+    { operation: 'enviar_evento', ambiente, pathTemplate: '/nfse/{chave}/eventos' },
+    sefinBase(ambiente),
+    options,
+  ));
+}
+
+export interface ConsultarEventoOptions extends SefinRequestOptions {
+  /** Numero sequencial do evento. Default: 1. */
+  nSeqEvento?: number | string;
+}
+
+/** SefinNacional · GET /nfse/{chave}/eventos/{tpEvento}/{nSeqEvento} — consulta um evento registrado. */
+export async function consultarEvento(
+  chaveAcesso: string,
+  tpEvento: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options: ConsultarEventoOptions = {},
+): Promise<SefinResposta> {
+  assertChaveAcesso(chaveAcesso);
+  const tipo = assertSegment('tpEvento', tpEvento, /^\d{6}$/, '6 digitos (ex.: 101101)');
+  const seq = assertSegment('nSeqEvento', options.nSeqEvento ?? 1, /^\d{1,3}$/, '1 a 3 digitos');
+  return parseJson(await sefinRequestWithRetry(
+    { method: 'GET', path: `/nfse/${chaveAcesso}/eventos/${tipo}/${seq}` },
+    pfx,
+    { operation: 'consultar_evento', ambiente, pathTemplate: '/nfse/{chave}/eventos/{tpEvento}/{nSeqEvento}' },
+    sefinBase(ambiente),
+    options,
+  ));
+}
+
+export interface DanfseResposta {
+  status: number;
+  contentType: string;
+  /** PDF do DANFSe, presente quando a resposta e 2xx e o corpo e um PDF. */
+  pdf?: Buffer;
+  /** Corpo parseado quando a resposta nao e um PDF (ex.: JSON de erro). */
+  body?: any;
+}
+
+/** ADN · GET /danfse/{chave} — baixa o PDF do DANFSe gerado pelo Ambiente de Dados Nacional. */
+export async function baixarDanfse(
+  chaveAcesso: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<DanfseResposta> {
+  assertChaveAcesso(chaveAcesso);
+  const raw = await sefinRequestWithRetry(
+    { method: 'GET', path: `/danfse/${chaveAcesso}`, accept: 'application/pdf' },
+    pfx,
+    { operation: 'baixar_danfse', ambiente, pathTemplate: '/danfse/{chave}' },
+    resolveAdnBaseUrl(ambiente),
+    options,
+  );
+  const isPdf = raw.buffer.subarray(0, 5).toString('latin1') === '%PDF-';
+  if (raw.status >= 200 && raw.status < 300 && isPdf) {
+    return { status: raw.status, contentType: raw.contentType, pdf: raw.buffer };
+  }
+  return { status: raw.status, contentType: raw.contentType, body: parseJson(raw).body };
+}
+
+export interface DistribuicaoNsuOptions extends SefinRequestOptions {
+  /** CNPJ consultado, quando diferente do titular do certificado. */
+  cnpjConsulta?: string;
+  /** true (default do ADN) retorna um lote de documentos a partir do NSU. */
+  lote?: boolean;
+}
+
+/** ADN · GET /contribuintes/DFe/{nsu} — distribuicao de documentos fiscais (emitidos e recebidos) por NSU. */
+export async function distribuirDfePorNsu(
+  nsu: string | number,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options: DistribuicaoNsuOptions = {},
+): Promise<SefinResposta> {
+  const nsuText = assertSegment('nsu', nsu, /^\d{1,20}$/, 'ate 20 digitos');
+  const query = new URLSearchParams();
+  if (options.cnpjConsulta) {
+    query.set('cnpjConsulta', assertSegment('cnpjConsulta', options.cnpjConsulta.replace(/\D/g, ''), /^\d{14}$/, '14 digitos'));
+  }
+  if (options.lote !== undefined) query.set('lote', String(options.lote));
+  const queryString = query.size > 0 ? `?${query.toString()}` : '';
+  return parseJson(await sefinRequestWithRetry(
+    { method: 'GET', path: `/contribuintes/DFe/${nsuText}${queryString}` },
+    pfx,
+    { operation: 'adn_distribuicao_nsu', ambiente, pathTemplate: '/contribuintes/DFe/{nsu}' },
+    resolveAdnBaseUrl(ambiente),
+    options,
+  ));
+}
+
+/** ADN · GET /contribuintes/NFSe/{chave}/Eventos — todos os eventos vinculados a NFS-e. */
+export async function consultarEventosPorChaveAdn(
+  chaveAcesso: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  assertChaveAcesso(chaveAcesso);
+  return parseJson(await sefinRequestWithRetry(
+    { method: 'GET', path: `/contribuintes/NFSe/${chaveAcesso}/Eventos` },
+    pfx,
+    { operation: 'adn_eventos_chave', ambiente, pathTemplate: '/contribuintes/NFSe/{chave}/Eventos' },
+    resolveAdnBaseUrl(ambiente),
+    options,
+  ));
+}
+
+const COD_MUN = /^\d{7}$/;
+const COD_SERVICO = /^[0-9.]{1,12}$/;
+const COMPETENCIA = /^\d{4}-\d{2}-\d{2}(T[0-9:.+-]+)?$/;
+
+async function consultarParametrosMunicipais(
+  segments: string[],
+  pathTemplate: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  const path = `/parametrizacao/${segments.map(encodeURIComponent).join('/')}`;
+  return parseJson(await sefinRequestWithRetry(
+    { method: 'GET', path },
+    pfx,
+    { operation: 'adn_parametros_municipais', ambiente, pathTemplate },
+    resolveAdnBaseUrl(ambiente),
+    options,
+  ));
+}
+
+/** ADN · GET /parametrizacao/{codMun}/convenio — situacao do convenio do municipio com o Sistema Nacional. */
+export async function consultarConvenio(
+  codigoMunicipio: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  const mun = assertSegment('codigoMunicipio', codigoMunicipio, COD_MUN, '7 digitos IBGE');
+  return consultarParametrosMunicipais([mun, 'convenio'], '/parametrizacao/{codMun}/convenio', pfx, ambiente, options);
+}
+
+/**
+ * ADN · GET /parametrizacao/{codMun}/{codServico}/{competencia}/aliquota — aliquota
+ * do ISSQN vigente para o servico na competencia (AAAA-MM-DD).
+ */
+export async function consultarAliquota(
+  codigoMunicipio: string,
+  codigoServico: string,
+  competencia: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return consultarParametrosMunicipais(
+    [
+      assertSegment('codigoMunicipio', codigoMunicipio, COD_MUN, '7 digitos IBGE'),
+      assertSegment('codigoServico', codigoServico, COD_SERVICO, 'codigo de servico (ex.: 01.01.01)'),
+      assertSegment('competencia', competencia, COMPETENCIA, 'data AAAA-MM-DD'),
+      'aliquota',
+    ],
+    '/parametrizacao/{codMun}/{codServico}/{competencia}/aliquota',
+    pfx,
+    ambiente,
+    options,
+  );
+}
+
+/** ADN · GET /parametrizacao/{codMun}/{codServico}/historicoaliquotas — historico de aliquotas do servico. */
+export async function consultarHistoricoAliquotas(
+  codigoMunicipio: string,
+  codigoServico: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return consultarParametrosMunicipais(
+    [
+      assertSegment('codigoMunicipio', codigoMunicipio, COD_MUN, '7 digitos IBGE'),
+      assertSegment('codigoServico', codigoServico, COD_SERVICO, 'codigo de servico (ex.: 01.01.01)'),
+      'historicoaliquotas',
+    ],
+    '/parametrizacao/{codMun}/{codServico}/historicoaliquotas',
+    pfx,
+    ambiente,
+    options,
+  );
+}
+
+/** ADN · GET /parametrizacao/{codMun}/{codServico}/{competencia}/regimes_especiais — regimes especiais de tributacao. */
+export async function consultarRegimesEspeciais(
+  codigoMunicipio: string,
+  codigoServico: string,
+  competencia: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return consultarParametrosMunicipais(
+    [
+      assertSegment('codigoMunicipio', codigoMunicipio, COD_MUN, '7 digitos IBGE'),
+      assertSegment('codigoServico', codigoServico, COD_SERVICO, 'codigo de servico (ex.: 01.01.01)'),
+      assertSegment('competencia', competencia, COMPETENCIA, 'data AAAA-MM-DD'),
+      'regimes_especiais',
+    ],
+    '/parametrizacao/{codMun}/{codServico}/{competencia}/regimes_especiais',
+    pfx,
+    ambiente,
+    options,
+  );
+}
+
+/** ADN · GET /parametrizacao/{codMun}/{competencia}/retencoes — retencoes de ISSQN do municipio. */
+export async function consultarRetencoes(
+  codigoMunicipio: string,
+  competencia: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return consultarParametrosMunicipais(
+    [
+      assertSegment('codigoMunicipio', codigoMunicipio, COD_MUN, '7 digitos IBGE'),
+      assertSegment('competencia', competencia, COMPETENCIA, 'data AAAA-MM-DD'),
+      'retencoes',
+    ],
+    '/parametrizacao/{codMun}/{competencia}/retencoes',
+    pfx,
+    ambiente,
+    options,
+  );
+}
+
+/** ADN · GET /parametrizacao/{codMun}/{numeroBeneficio}/{competencia}/beneficio — beneficio municipal. */
+export async function consultarBeneficio(
+  codigoMunicipio: string,
+  numeroBeneficio: string,
+  competencia: string,
+  pfx: CertificateInput,
+  ambiente?: Ambiente,
+  options?: SefinRequestOptions,
+): Promise<SefinResposta> {
+  return consultarParametrosMunicipais(
+    [
+      assertSegment('codigoMunicipio', codigoMunicipio, COD_MUN, '7 digitos IBGE'),
+      assertSegment('numeroBeneficio', numeroBeneficio, /^[0-9A-Za-z]{1,20}$/, 'ate 20 caracteres alfanumericos'),
+      assertSegment('competencia', competencia, COMPETENCIA, 'data AAAA-MM-DD'),
+      'beneficio',
+    ],
+    '/parametrizacao/{codMun}/{numeroBeneficio}/{competencia}/beneficio',
+    pfx,
+    ambiente,
+    options,
   );
 }

@@ -37,7 +37,11 @@ O SDK cuida da camada protocolar: certificado A1, montagem de DPS, validações 
 - [Inspecionar o XML antes de enviar](#inspecionar-o-xml-antes-de-enviar)
 - [Tratar rejeições da SEFIN](#tratar-rejeições-da-sefin)
 - [Consultar uma NFS-e emitida](#consultar-uma-nfs-e-emitida)
-- [Enviar evento](#enviar-evento-ex-cancelamento)
+- [Recuperar uma emissão após timeout](#recuperar-uma-emissão-após-timeout)
+- [Cancelar uma NFS-e](#cancelar-uma-nfs-e)
+- [DANFSe (PDF)](#danfse-pdf)
+- [Distribuição e parâmetros municipais (ADN)](#distribuição-e-parâmetros-municipais-adn)
+- [Timeout e novas tentativas](#timeout-e-novas-tentativas)
 - [Série e número da DPS](#série-e-número-da-dps)
 - [Ambientes](#ambientes)
 - [Agentes de IA e MCP](#agentes-de-ia-e-mcp)
@@ -425,29 +429,122 @@ try {
 ## Consultar uma NFS-e emitida
 
 ```ts
-import { consultarNfse } from '@useinvio/nfse-sdk';
+import { ConsultaNfseError, obterNfse } from '@useinvio/nfse-sdk';
 
-const resposta = await consultarNfse(chaveAcesso, certificado, 'restrita');
-
-if (resposta.status === 200) {
-  console.log(resposta.body);
-} else {
-  console.error('Falha na consulta:', resposta.status, resposta.body);
+try {
+  const nota = await obterNfse(chaveAcesso, certificado, 'restrita');
+  console.log(nota.resumo.nNFSe, nota.resumo.cStat, nota.resumo.valores.vLiq);
+  console.log(nota.nfseXml); // XML autorizado, já descompactado
+} catch (error) {
+  if (error instanceof ConsultaNfseError && error.notFound) console.log('NFS-e não existe neste ambiente');
+  else throw error;
 }
 ```
 
+`resumo` traz número, situação, emitente, tomador, DPS de origem e valores
+(`vServ`, `vBC`, `pAliqAplic`, `vISSQN`, `vTotalRet`, `vLiq`). Para ler um XML
+que você já tem, use `lerNfse(xml)`. No cliente: `client.invoices.retrieve(chave)`.
+A resposta crua continua disponível em `consultarNfse(...)` / `client.invoices.get(...)`.
+
 ---
 
-## Enviar evento (ex.: cancelamento)
+## Recuperar uma emissão após timeout
+
+`POST /nfse` não é idempotente, por isso o SDK **nunca** repete uma emissão
+automaticamente. Se a conexão cair sem resposta, pergunte à SEFIN se a DPS foi
+processada antes de reenviar:
 
 ```ts
-import { enviarEvento, gzipBase64, signEnveloped } from '@useinvio/nfse-sdk';
+import { prepararNota, recuperarNfsePorDps, transmitirNotaPreparada } from '@useinvio/nfse-sdk';
 
-const signedEventXml = signEnveloped(pedRegXml, pedRegId, 'infPedReg', certificado);
-const pedRegXmlGZipB64 = gzipBase64(signedEventXml);
-
-const resposta = await enviarEvento(pedRegXmlGZipB64, certificado, chaveAcesso, 'restrita');
+const nota = prepararNota(dps, certificado); // persista nota.dpsId e nota.signedXml antes de enviar
+try {
+  return await transmitirNotaPreparada(nota, certificado, { timeoutMs: 30_000 });
+} catch (error) {
+  if (error instanceof Error && error.name === 'EmitirNotaError') throw error; // rejeição real
+  const existente = await recuperarNfsePorDps(nota.dpsId, certificado, nota.ambiente, { retries: 3 });
+  return existente ?? transmitirNotaPreparada(nota, certificado); // null: a DPS não chegou à SEFIN
+}
 ```
+
+Veja [`examples/recover-emission.ts`](./examples/recover-emission.ts).
+
+---
+
+## Cancelar uma NFS-e
+
+```ts
+import { cancelarNfse, RegistrarEventoError } from '@useinvio/nfse-sdk';
+
+try {
+  const evento = await cancelarNfse(
+    {
+      ambiente: 'restrita',
+      chaveAcesso,
+      cMotivo: '1', // 1 = erro na emissão, 2 = serviço não prestado, 9 = outros
+      xMotivo: 'Nota emitida com valor incorreto', // 15 a 255 caracteres
+      // autor: { CNPJ: '...' } // padrão: CNPJ/CPF do titular do certificado
+    },
+    certificado,
+  );
+  console.log(evento.pedRegEventoId, evento.eventoXml);
+} catch (error) {
+  if (error instanceof RegistrarEventoError) console.error(error.status, error.erros);
+  else throw error;
+}
+```
+
+O SDK monta o `pedRegEvento` v1.01, valida contra o XSD oficial, assina
+`infPedReg`, compacta e envia em `pedidoRegistroEventoXmlGZipB64`. Para
+substituição (e105102), emita a nota substituta e chame
+`cancelarNfsePorSubstituicao({ chaveAcesso, chaveSubstituta, cMotivo: '01' }, certificado)`.
+Consulte eventos com `consultarEvento(chave, TP_EVENTO.cancelamento, certificado)`
+(SEFIN) ou `consultarEventosPorChaveAdn(chave, certificado)` (ADN). Para montar sem
+enviar: `buildCancelamentoFromJson(...)` e `buildCancelamentoPorSubstituicaoFromJson(...)`.
+
+---
+
+## DANFSe (PDF)
+
+```ts
+import { writeFile } from 'node:fs/promises';
+import { baixarDanfse } from '@useinvio/nfse-sdk';
+
+const danfse = await baixarDanfse(chaveAcesso, certificado, 'restrita');
+if (danfse.pdf) await writeFile(`danfse-${chaveAcesso}.pdf`, danfse.pdf);
+else console.error(danfse.status, danfse.body);
+```
+
+O PDF oficial vem do Ambiente de Dados Nacional (ADN), `GET /danfse/{chave}`.
+
+---
+
+## Distribuição e parâmetros municipais (ADN)
+
+| Função | Endpoint (ADN) |
+|---|---|
+| `distribuirDfePorNsu(nsu, certificado, ambiente?, { cnpjConsulta?, lote? })` | `GET /contribuintes/DFe/{nsu}` |
+| `consultarEventosPorChaveAdn(chave, certificado, ambiente?)` | `GET /contribuintes/NFSe/{chave}/Eventos` |
+| `consultarConvenio(codMun, certificado, ambiente?)` | `GET /parametrizacao/{codMun}/convenio` |
+| `consultarAliquota(codMun, codServico, competencia, ...)` | `GET /parametrizacao/{codMun}/{codServico}/{competencia}/aliquota` |
+| `consultarHistoricoAliquotas(codMun, codServico, ...)` | `GET /parametrizacao/{codMun}/{codServico}/historicoaliquotas` |
+| `consultarRegimesEspeciais(codMun, codServico, competencia, ...)` | `GET /parametrizacao/{codMun}/{codServico}/{competencia}/regimes_especiais` |
+| `consultarRetencoes(codMun, competencia, ...)` | `GET /parametrizacao/{codMun}/{competencia}/retencoes` |
+| `consultarBeneficio(codMun, numeroBeneficio, competencia, ...)` | `GET /parametrizacao/{codMun}/{numeroBeneficio}/{competencia}/beneficio` |
+
+Os parâmetros de caminho são validados antes de qualquer chamada de rede
+(`SefinParametroInvalidoError`). No cliente: `client.distribution.byNsu(...)` e
+`client.municipalParameters.agreement(...)`, `.rate(...)`, `.rateHistory(...)`,
+`.specialRegimes(...)`, `.withholdings(...)`, `.benefit(...)`.
+
+---
+
+## Timeout e novas tentativas
+
+Toda função de rede aceita `{ timeoutMs, retries, signal }` (padrão: 60 s, 0 tentativas).
+`retries` vale apenas para GETs (erros de rede e HTTP 429/502/503/504, com backoff
+exponencial). Emissão e eventos nunca são repetidos. No cliente, configure uma vez
+com `new NfseClient({ ..., request: { timeoutMs: 30_000, retries: 2 } })`.
 
 ---
 
@@ -482,10 +579,10 @@ serie 1601, nDPS 3
 
 ## Ambientes
 
-| Chave | URL |
-|---|---|
-| `restrita` | `https://sefin.producaorestrita.nfse.gov.br/SefinNacional` |
-| `producao` | `https://sefin.nfse.gov.br/SefinNacional` |
+| Chave | SEFIN (emissão, consulta, eventos) | ADN (DANFSe, distribuição, parâmetros) |
+|---|---|---|
+| `restrita` | `https://sefin.producaorestrita.nfse.gov.br/SefinNacional` | `https://adn.producaorestrita.nfse.gov.br` |
+| `producao` | `https://sefin.nfse.gov.br/SefinNacional` | `https://adn.nfse.gov.br` |
 
 ```ts
 import { resolveSefinBaseUrl } from '@useinvio/nfse-sdk';
@@ -539,8 +636,15 @@ A emissão ainda não é exposta como ferramenta: ela exigirá confirmação exp
 |---|---|
 | `new NfseClient(options)` | Cria cliente com ambiente, certificado e defaults no mesmo formato do JSON declarativo. |
 | `emitirNfse(input, certificado, options?)` | Emite uma NFS-e a partir de XML ou JSON. Retorna `ResultadoEmissaoNota`. |
-| `consultarNfse(chaveAcesso, certificado, ambiente?)` | Consulta uma NFS-e pela chave de acesso. |
-| `enviarEvento(xmlGzipB64, certificado, chaveAcesso, ambiente?)` | Envia evento fiscal (cancelamento, etc.). |
+| `obterNfse(chaveAcesso, certificado, ambiente?, options?)` | Consulta a NFS-e e devolve XML descompactado + `resumo` tipado. |
+| `recuperarNfsePorDps(dpsId, certificado, ambiente?, options?)` | Recupera a NFS-e de uma DPS após timeout; `null` se não existe. |
+| `cancelarNfse(input, certificado, options?)` | Cancela uma NFS-e (e101101). |
+| `cancelarNfsePorSubstituicao(input, certificado, options?)` | Cancela por substituição (e105102). |
+| `baixarDanfse(chaveAcesso, certificado, ambiente?, options?)` | Baixa o PDF do DANFSe (ADN). |
+| `consultarNfse(chaveAcesso, certificado, ambiente?, options?)` | Consulta crua: `{ status, body }`. |
+| `consultarDps(dpsId, certificado, ambiente?, options?)` | `GET /dps/{id}` cru. |
+| `consultarEvento(chave, tpEvento, certificado, ambiente?, { nSeqEvento? })` | Consulta um evento registrado. |
+| `enviarEvento(xmlGzipB64, certificado, chaveAcesso, ambiente?)` | Envia um pedido de evento já assinado e compactado. |
 | `buildDpsFromJson(nota)` | Monta o XML da DPS sem assinar nem enviar. |
 | `setSefinRequestObserver(observer)` | Registra um hook para observar latência/status das chamadas à SEFIN. |
 | `createSefinLatencyTracker(options?)` | Agrega amostras recentes e pode calcular percentis quando `includePercentiles` estiver habilitado. |
@@ -564,8 +668,10 @@ A emissão ainda não é exposta como ferramenta: ela exigirá confirmação exp
 | `verifyDps(xml, certPem)` | Verifica assinatura de uma DPS. |
 | `gzipBase64(xml)` | Compacta XML em GZip e codifica em Base64. |
 | `gunzipBase64(b64)` | Descompacta resposta GZip/Base64. |
+| `lerNfse(xml)` | Lê um XML de NFS-e autorizada em um `NfseResumo` tipado. |
+| `validatePedRegEventoXmlAgainstXsd(xml)` | Valida um pedido de evento contra o XSD oficial. |
 | `extrairErros(body)` | Normaliza erros oficiais de uma resposta da SEFIN. |
-| `resolveSefinBaseUrl(ambiente)` | Retorna a URL base do ambiente. |
+| `resolveSefinBaseUrl(ambiente)` / `resolveAdnBaseUrl(ambiente)` | Retornam as URLs base do ambiente. |
 
 ### Tipos exportados
 

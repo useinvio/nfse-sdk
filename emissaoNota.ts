@@ -10,11 +10,17 @@ import { validateDpsXmlAgainstXsd, XsdEngineUnavailableError } from './xsdValida
 import type { Ambiente } from './config.js';
 import type { DpsJsonRequest } from './dpsJson.js';
 import { resolveCredentials, type CertificateInput } from './certificate.js';
-import type { SefinErro } from './sefinClient.js';
+import type { SefinErro, SefinRequestOptions } from './sefinClient.js';
 
 export type NotaInput = DpsJsonRequest | string;
 
-export interface EmitirNotaOptions {
+/**
+ * Transport options for emission. There is deliberately no `retries`: POST /nfse
+ * is not idempotent. After a timeout, call `recuperarNfsePorDps(dpsId)` first.
+ */
+export type TransmissaoOptions = Omit<SefinRequestOptions, 'retries'>;
+
+export interface EmitirNotaOptions extends TransmissaoOptions {
   ambiente?: Ambiente;
   /** Obrigatorio quando o input for XML sem Id em <infDPS>. */
   dpsId?: string;
@@ -93,11 +99,15 @@ export function prepararNota(
 export async function transmitirNotaPreparada(
   nota: NotaPreparada,
   pfx: CertificateInput,
+  options: TransmissaoOptions = {},
 ): Promise<ResultadoEmissaoNota> {
   assertEnvironment(dpsEnvironment(nota.signedXml), nota.ambiente);
   assertCertificateValidity(pfx);
   const dpsXmlGZipB64 = gzipBase64(nota.signedXml);
-  const { status, body } = await transmitirDpsCompactada(dpsXmlGZipB64, pfx, nota.ambiente);
+  const { status, body } = await transmitirDpsCompactada(dpsXmlGZipB64, pfx, nota.ambiente, {
+    timeoutMs: options.timeoutMs,
+    signal: options.signal,
+  });
   const nfseB64 = body?.nfseXmlGZipB64 ?? body?.NfseXmlGZipB64;
 
   if (status >= 200 && status < 300 && nfseB64) {
@@ -132,5 +142,5 @@ export async function emitirNfse(
   pfx: CertificateInput,
   options: EmitirNotaOptions = {},
 ): Promise<ResultadoEmissaoNota> {
-  return transmitirNotaPreparada(prepararNota(input, pfx, options), pfx);
+  return transmitirNotaPreparada(prepararNota(input, pfx, options), pfx, options);
 }
