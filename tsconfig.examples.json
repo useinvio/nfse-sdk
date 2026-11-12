@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@useinvio/nfse-sdk": [
+        "./index.ts"
+      ],
+      "@useinvio/nfse-sdk/agent": [
+        "./agent.ts"
+      ]
+    }
+  },
+  "include": [
+    "examples/*.ts"
+  ]
+}

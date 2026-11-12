@@ -30,9 +30,20 @@ Para mudancas de empacotamento, API publica ou publicacao:
 
 ```bash
 npm run typecheck
+npm run typecheck:examples
 npm run build
 npm test
 npm pack --dry-run
+```
+
+### Usar a versao local em outro projeto
+
+```json
+{
+  "dependencies": {
+    "@useinvio/nfse-sdk": "file:../nfse-sdk"
+  }
+}
 ```
 
 ## Escopo das mudancas
@@ -78,8 +89,9 @@ Os schemas oficiais ficam em:
 schemas/nfse/v1.01/Schemas/1.01
 ```
 
-O teste `test/xsdValidation.test.ts` valida uma DPS gerada contra
-`DPS_v1.01.xsd` usando `xmllint`.
+O teste `test/xsdValidation.test.ts` valida DPS geradas contra
+`DPS_v1.01.xsd` com o motor embutido (libxml2 em WebAssembly). Se o `xmllint`
+estiver instalado, como no CI, ele tambem e usado como verificacao cruzada.
 
 Se atualizar schemas oficiais:
 
@@ -120,14 +132,41 @@ Evite multiplicar pontos de entrada. O fluxo principal deve continuar simples:
 Ao exportar algo novo, atualize:
 
 - `index.ts`;
-- `README.md`, se for parte da API de usuario;
+- `docs/referencia/api.md` e o guia em `docs/guias/` correspondente;
+- `llms.txt`, se mudar o que um assistente de codigo precisa saber;
 - testes de build/tipo, quando aplicavel.
 
 ## Documentacao
 
+A documentacao segue quatro tipos (Diataxis), em `docs/`:
+
+- `tutoriais/`: um caminho guiado do zero, para quem esta comecando;
+- `guias/`: uma tarefa especifica por pagina ("como cancelar");
+- `referencia/`: tabelas completas de funcoes, erros e ambientes;
+- `conceitos/`: o porque das decisoes.
+
+O `README.md` fica curto (o que faz, instalacao, exemplo de 60 segundos e
+links). Detalhes vao para `docs/`. O `README.en.md` e o resumo em ingles.
+
 Exemplos devem ser copiaveis e honestos sobre responsabilidade fiscal. Quando
 um campo for condicional, explique a condicao. Quando algo ainda nao for
 suportado, documente explicitamente em vez de sugerir suporte parcial.
+
+`test/documentation.test.ts` verifica, em todo Markdown do repositorio:
+
+- que os payloads JSON completos dos exemplos geram uma DPS valida no XSD;
+- que todo nome importado de `@useinvio/nfse-sdk` nos exemplos existe;
+- que links relativos e ancoras apontam para arquivos e titulos existentes.
+
+## Publicacao
+
+O pacote e publicado como [`@useinvio/nfse-sdk`](https://www.npmjs.com/package/@useinvio/nfse-sdk)
+pelo workflow `publish.yml` (npm trusted publishing), ao criar uma tag ou release.
+Antes de publicar:
+
+- atualize a versao em `package.json` e o `CHANGELOG.md`;
+- rode os comandos de empacotamento acima;
+- confira o conteudo com `npm pack --dry-run`.
 
 ## Pull requests
 
