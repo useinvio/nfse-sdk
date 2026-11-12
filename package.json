@@ -21,10 +21,12 @@
     "dist/*.js",
     "dist/*.js.map",
     "dist/schemas/**/*.xsd",
-    "docs/*.md",
+    "docs/**/*.md",
     "examples/*.ts",
     "examples/README.md",
     "README.md",
+    "README.en.md",
+    "CHANGELOG.md",
     "JSON_MAPPING.md",
     "llms.txt",
     "LICENSE",
@@ -34,7 +36,8 @@
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build && tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js"
+    "test": "npm run build && tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js",
+    "typecheck:examples": "tsc -p tsconfig.examples.json"
   },
   "keywords": [
     "nfse",

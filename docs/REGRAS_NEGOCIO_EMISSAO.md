@@ -41,7 +41,7 @@ Para o ISS, a LC 116/2003 distingue exportação de serviço de serviço desenvo
 
 **Entrada XML:** passa pelo XSD e pela assinatura, mas não pela matriz fiscal do JSON. Assim, uma restrição do builder não significa necessariamente proibição no leiaute. O XML externo precisa ser montado e validado pelo integrador.
 
-Base: [fluxo de emissão](/Users/tiagofonseca/priv_repo/nfse-sdk/emissaoNota.ts:57), [builder](/Users/tiagofonseca/priv_repo/nfse-sdk/dpsJson.ts:475), [cliente](/Users/tiagofonseca/priv_repo/nfse-sdk/client.ts:88).
+Base: [fluxo de emissão](../emissaoNota.ts#L57), [builder](../dpsJson.ts#L475), [cliente](../client.ts#L88).
 
 ## 3. Regras comuns a todas as emissões
 
@@ -77,7 +77,7 @@ O serviço possui um único bloco, sem lista de itens. Não há modelagem de mú
 
 **Atenção ao ambiente:** na função direta `emitirNfse`, `options.ambiente` escolhe o destino, mas o XML JSON é construído usando `request.ambiente`. Valores diferentes podem gerar `tpAmb` incompatível com o destino. No cliente, `invoices.get` usa o ambiente do construtor, mesmo que uma emissão tenha sobrescrito o ambiente.
 
-Base: [cadastros e datas](/Users/tiagofonseca/priv_repo/nfse-sdk/fiscalValidation.ts:186), [identificador](/Users/tiagofonseca/priv_repo/nfse-sdk/dpsJson.ts:290), [precedências](/Users/tiagofonseca/priv_repo/nfse-sdk/client.ts:88).
+Base: [cadastros e datas](../fiscalValidation.ts#L186), [identificador](../dpsJson.ts#L290), [precedências](../client.ts#L88).
 
 ## 4. Matriz nacional × exterior
 
@@ -116,7 +116,7 @@ Quando `tomador` existe, `xNome` e exatamente um entre `CNPJ`, `CPF`, `NIF` e `c
 
 **Intermediário:** opcional; a interface pública e o XML suportam CPF ou CNPJ e nome. O validador genérico também reconhece NIF/`cNaoNIF`, mas o builder do intermediário não os serializa. Portanto, intermediário estrangeiro não tem suporte completo, mesmo que um objeto JavaScript passe pela pré-validação.
 
-Base: [pessoas](/Users/tiagofonseca/priv_repo/nfse-sdk/fiscalValidation.ts:223), [matriz operacional](/Users/tiagofonseca/priv_repo/nfse-sdk/fiscalValidation.ts:409).
+Base: [pessoas](../fiscalValidation.ts#L223), [matriz operacional](../fiscalValidation.ts#L409).
 
 ## 5. ISSQN, regimes e carga tributária
 
@@ -161,7 +161,7 @@ A carga aproximada não é o ISS devido nem o valor líquido da nota. O SDK não
 
 `regEspTrib` é obrigatório e aceita: `0` nenhum; `1` ato cooperado; `2` estimativa; `3` microempresa municipal; `4` notário/registrador; `5` autônomo; `6` sociedade de profissionais; `9` outros. Não há cruzamento com serviço, município ou opção pelo Simples.
 
-Base: [ISSQN](/Users/tiagofonseca/priv_repo/nfse-sdk/fiscalValidation.ts:297), [totais](/Users/tiagofonseca/priv_repo/nfse-sdk/fiscalValidation.ts:336), [domínios locais](/Users/tiagofonseca/priv_repo/nfse-sdk/schemas/nfse/v1.01/Schemas/1.01/tiposSimples_v1.01.xsd:996).
+Base: [ISSQN](../fiscalValidation.ts#L297), [totais](../fiscalValidation.ts#L336), [domínios locais](../schemas/nfse/v1.01/Schemas/1.01/tiposSimples_v1.01.xsd#L996).
 
 ## 6. Valores e comércio exterior
 
@@ -197,7 +197,7 @@ Todos os campos abaixo são obrigatórios quando o bloco está presente, exceto 
 
 A pré-validação exige presença desses códigos; a verificação dos respectivos domínios fica principalmente no XSD. `comercioExterior.cPaisResult` existe no tipo, mas é ignorado na geração do XML: o campo efetivo fica em `tributacaoMunicipal.cPaisResult`.
 
-Base: [cálculo](/Users/tiagofonseca/priv_repo/nfse-sdk/dpsJson.ts:243), [comércio exterior](/Users/tiagofonseca/priv_repo/nfse-sdk/dpsJson.ts:459), [estrutura local](/Users/tiagofonseca/priv_repo/nfse-sdk/schemas/nfse/v1.01/Schemas/1.01/tiposComplexos_v1.01.xsd:1364).
+Base: [cálculo](../dpsJson.ts#L243), [comércio exterior](../dpsJson.ts#L459), [estrutura local](../schemas/nfse/v1.01/Schemas/1.01/tiposComplexos_v1.01.xsd#L1364).
 
 ## 7. Tributos federais e funcionalidades especiais
 
@@ -229,7 +229,7 @@ No XSD, os tipos de retenção federal são: `0` nenhum dos três tributos retid
 
 A ausência de suporte a IBS/CBS não permite concluir que sua omissão seja válida em qualquer emissão atual. O portal oficial mantém documentação de produção, esquemas e anexos próprios; esta análise verificou o código e os esquemas locais, sem certificar aderência integral a todas as atualizações publicadas. [Fonte: documentação técnica de produção da NFS-e](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual).
 
-Base: [validação federal e funcionalidades bloqueadas](/Users/tiagofonseca/priv_repo/nfse-sdk/fiscalValidation.ts:384), [serialização de tributos](/Users/tiagofonseca/priv_repo/nfse-sdk/dpsJson.ts:385), [obra no XSD](/Users/tiagofonseca/priv_repo/nfse-sdk/schemas/nfse/v1.01/Schemas/1.01/tiposComplexos_v1.01.xsd:1517).
+Base: [validação federal e funcionalidades bloqueadas](../fiscalValidation.ts#L384), [serialização de tributos](../dpsJson.ts#L385), [obra no XSD](../schemas/nfse/v1.01/Schemas/1.01/tiposComplexos_v1.01.xsd#L1517).
 
 ## 8. Autorização, erros e continuidade
 
@@ -252,7 +252,7 @@ Não existem armazenamento, estados persistentes, idempotência, controle de con
 
 **Certificado:** `assertCertificateForProvider` verifica vigência e busca o CPF/CNPJ do prestador nos dados do certificado, mas não é chamada por `emitirNfse`, `prepararNota` ou `transmitirNotaPreparada`. A verificação criptográfica da assinatura não substitui essa checagem de titularidade/vigência.
 
-Base: [respostas](/Users/tiagofonseca/priv_repo/nfse-sdk/emissaoNota.ts:89), [certificado](/Users/tiagofonseca/priv_repo/nfse-sdk/certificateValidation.ts:15), [XSD](/Users/tiagofonseca/priv_repo/nfse-sdk/xsdValidation.ts:67), [transporte e erros](/Users/tiagofonseca/priv_repo/nfse-sdk/sefinClient.ts:205).
+Base: [respostas](../emissaoNota.ts#L89), [certificado](../certificateValidation.ts#L15), [XSD](../xsdValidation.ts#L67), [transporte e erros](../sefinClient.ts#L205).
 
 ## 9. Catálogo de cenários para produto e QA
 
@@ -314,4 +314,4 @@ A análise cruzou validadores, builders, transmissão, cliente, testes, document
 
 Nenhuma nota foi transmitida, nenhum certificado real foi utilizado e não houve homologação com a SEFIN. As evidências demonstram comportamento local, não aceitação em produção. O código de emissão não foi alterado.
 
-**Referências de manutenção:** [validador fiscal](/Users/tiagofonseca/priv_repo/nfse-sdk/fiscalValidation.ts), [modelo e XML](/Users/tiagofonseca/priv_repo/nfse-sdk/dpsJson.ts), [testes de regras](/Users/tiagofonseca/priv_repo/nfse-sdk/test/dpsJson.test.ts), [testes de XSD](/Users/tiagofonseca/priv_repo/nfse-sdk/test/xsdValidation.test.ts), [matriz interna anterior](/Users/tiagofonseca/priv_repo/nfse-sdk/docs/FISCAL_MATRIX.md), [mapeamento anterior](/Users/tiagofonseca/priv_repo/nfse-sdk/JSON_MAPPING.md).
+**Referências de manutenção:** [validador fiscal](../fiscalValidation.ts), [modelo e XML](../dpsJson.ts), [testes de regras](../test/dpsJson.test.ts), [testes de XSD](../test/xsdValidation.test.ts), [matriz interna anterior](FISCAL_MATRIX.md), [mapeamento anterior](../JSON_MAPPING.md).

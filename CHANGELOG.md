@@ -44,6 +44,17 @@ Todas as mudancas relevantes deste pacote sao documentadas aqui. O formato segue
 - `enviarEvento` agora envia o campo oficial `pedidoRegistroEventoXmlGZipB64`.
   Antes enviava `pedRegXmlGZipB64`, que a SEFIN nao reconhece.
 
+### Documentation
+
+- README reduzido ao essencial (operacoes, instalacao, exemplo de 60 segundos).
+  A documentacao completa foi para `docs/`, dividida em tutorial, guias,
+  referencia e conceitos. `ENGLISH.md` virou `README.en.md`, um resumo em ingles.
+- Testes verificam, em todo Markdown, os payloads de exemplo contra o XSD, os
+  nomes importados do pacote e os links relativos e ancoras. O CI tambem faz a
+  checagem de tipos dos exemplos (`npm run typecheck:examples`).
+- Links absolutos de maquina local em `docs/REGRAS_NEGOCIO_EMISSAO.md` viraram
+  links relativos.
+
 ## [3.1.0] - nao publicado
 
 ### Added

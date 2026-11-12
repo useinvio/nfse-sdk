@@ -6,8 +6,8 @@ It is not a fiscal decision engine. Do not infer tax codes, accounting rules, te
 
 ## Start Here
 
-- `README.md`: primary Portuguese documentation and examples.
-- `ENGLISH.md`: English documentation with the same conceptual flow.
+- `README.md` (pt-BR) and `README.en.md` (English): what the SDK does, install, a 60-second example.
+- `docs/README.md`: documentation index (pt-BR). `docs/tutoriais/` (first NFS-e end to end), `docs/guias/` (one task per page: certificate, emit, query, recover, cancel, errors, timeouts, ADN, AI agents), `docs/referencia/` (API, errors, environments), `docs/conceitos/como-funciona.md` (protocol flow and design).
 - `docs/METRICS.md`: detailed SEFIN latency metrics guide, including the `NFSE_SEFIN_LATENCY_METRICS` env switch, observer setup, optional P99 snapshots, and export guidance.
 - `index.ts`: public exports. Treat this as the supported API surface.
 - `examples/`: runnable usage examples.
