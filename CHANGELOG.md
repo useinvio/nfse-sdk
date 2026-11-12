@@ -4,7 +4,10 @@ Todas as mudancas relevantes deste pacote sao documentadas aqui. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa
 [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
-## [3.2.0] - nao publicado
+## [3.2.0] - 2026-11-12
+
+Primeira publicacao desde a 3.0.0: inclui tambem as mudancas listadas em 3.1.0,
+que nunca foi publicada no npm.
 
 ### Added
 
@@ -81,7 +84,9 @@ Todas as mudancas relevantes deste pacote sao documentadas aqui. O formato segue
 - Links absolutos de maquina local em `docs/REGRAS_NEGOCIO_EMISSAO.md` viraram
   links relativos.
 
-## [3.1.0] - nao publicado
+## 3.1.0 - nao publicada
+
+Versao interna, distribuida como parte da 3.2.0.
 
 ### Added
 
@@ -160,8 +165,7 @@ em [docs/CORRECOES_EMISSAO.md](docs/CORRECOES_EMISSAO.md).
 
 Versoes anteriores: veja as [releases no GitHub](https://github.com/useinvio/nfse-sdk/releases).
 
-[3.2.0]: https://github.com/useinvio/nfse-sdk/compare/3.0.0...HEAD
-[3.1.0]: https://github.com/useinvio/nfse-sdk/compare/3.0.0...HEAD
+[3.2.0]: https://github.com/useinvio/nfse-sdk/compare/3.0.0...3.2.0
 [3.0.0]: https://github.com/useinvio/nfse-sdk/releases/tag/3.0.0
 [2.2.0]: https://github.com/useinvio/nfse-sdk/releases/tag/2.2.0
 [2.1.0]: https://github.com/useinvio/nfse-sdk/releases/tag/2.1.0
