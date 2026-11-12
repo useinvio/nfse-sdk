@@ -62,6 +62,36 @@ Tudo é importado da raiz do pacote, exceto as ferramentas de agente
 `consultarRetencoes`, `consultarBeneficio`. Assinaturas e endpoints em
 [Distribuição e parâmetros municipais](../guias/adn.md).
 
+## Rejeições
+
+| Função | Descrição |
+|---|---|
+| `explicarRejeicao(codigoOuErro)` | Mensagem, regra, campo e nível oficiais de um código, ou `conhecida: false`. |
+| `explicarErros(erros)` | Explica todos os erros de uma rejeição. |
+| `buscarRejeicao(codigo)` / `listarRejeicoes()` | Acesso direto ao catálogo oficial. |
+| `REJEICOES_FONTES` | Anexos oficiais usados no catálogo, com URL. |
+
+## Testes (`@useinvio/nfse-sdk/testing`)
+
+| Função | Descrição |
+|---|---|
+| `createTestCertificate(opts?)` | Certificado A1 de teste com CNPJ/CPF nos campos ICP-Brasil. |
+| `installMockSefin(opts?)` | SEFIN e ADN simulados no processo; `rejectNext`, `failNext`, `dropResponseNext`, `route`, `restore`. |
+
+Guia: [Testar sem certificado](../guias/testes.md).
+
+## Agentes e MCP
+
+| API | Descrição |
+|---|---|
+| `nfseAgentTools` (`/agent`) | Ferramentas só de leitura. |
+| `createNfseAgentToolkit({ allowWrite?, confirmationTtlMs? })` (`/agent`) | Leitura + emissão e cancelamento em duas etapas. |
+| `toAgentIssues(error)` (`/agent`) | Converte erros do SDK em issues para o modelo. |
+| `createNfseMcpServer(opts)` / `runNfseMcpStdio(opts?)` (`/mcp`) | Servidor MCP sem dependências. |
+| `nfse-mcp` (bin) | `npx -y @useinvio/nfse-mcp` ou `npx -y -p @useinvio/nfse-sdk nfse-mcp`. |
+
+Guia: [Agentes de IA e MCP](../guias/agentes-ia.md).
+
 ## Certificado
 
 | API | Descrição |

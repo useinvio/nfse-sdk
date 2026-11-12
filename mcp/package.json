@@ -1,0 +1,43 @@
+{
+  "name": "@useinvio/nfse-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Brazil's NFS-e Nacional: validate, emit, query and cancel service invoices from Claude, Cursor or any MCP client.",
+  "mcpName": "io.github.useinvio/nfse-mcp",
+  "type": "module",
+  "bin": {
+    "nfse-mcp": "bin/nfse-mcp.js"
+  },
+  "files": [
+    "bin/*.js",
+    "README.md",
+    "server.json"
+  ],
+  "dependencies": {
+    "@useinvio/nfse-sdk": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "nfse",
+    "nfs-e",
+    "nfs-e-nacional",
+    "nota-fiscal",
+    "sefin",
+    "claude",
+    "brazil"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/useinvio/nfse-sdk.git",
+    "directory": "mcp"
+  },
+  "homepage": "https://github.com/useinvio/nfse-sdk/tree/main/mcp#readme",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

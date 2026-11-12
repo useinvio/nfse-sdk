@@ -62,5 +62,11 @@ export function verifyDps(signedXml: string, certPem: string): boolean {
   if (!signature) throw new Error('Nenhuma <Signature> encontrada no XML');
   const sig = new SignedXml({ publicCert: certPem });
   sig.loadSignature(signature as unknown as Node);
-  return sig.checkSignature(signedXml);
+  try {
+    return sig.checkSignature(signedXml);
+  } catch (error) {
+    // xml-crypto 6 throws instead of returning false for a wrong key or tampered content.
+    if (error instanceof Error && /invalid signature|digest/i.test(error.message)) return false;
+    throw error;
+  }
 }

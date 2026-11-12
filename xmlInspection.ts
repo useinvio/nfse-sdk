@@ -5,7 +5,7 @@ import { SAFE_PARSE_OPTIONS, XsdEngineUnavailableError } from './xsdValidation.j
 
 const NS = 'http://www.sped.fazenda.gov.br/nfse';
 
-export function parseNfseXml(xml: string, rootName: 'DPS' | 'NFSe'): Element {
+export function parseNfseXml(xml: string, rootName: 'DPS' | 'NFSe' | 'pedRegEvento' | 'evento'): Element {
   const errors: string[] = [];
   const doc = new DOMParser({ errorHandler: (level, message) => errors.push(`${level}: ${message}`) }).parseFromString(xml, 'application/xml');
   const roots = Array.from(doc.childNodes).filter((node) => node.nodeType === 1);

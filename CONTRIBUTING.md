@@ -1,6 +1,7 @@
 # Contributing
 
-Obrigado por contribuir com o `@useinvio/nfse-sdk`.
+Obrigado por contribuir com o `@useinvio/nfse-sdk`. Agentes de IA que alteram o
+repositorio devem ler tambem o [AGENTS.md](./AGENTS.md).
 
 Este SDK cuida da integracao tecnica com a NFS-e Nacional: montagem de XML,
 assinatura, compactacao, mTLS, envio, consulta e normalizacao de respostas da

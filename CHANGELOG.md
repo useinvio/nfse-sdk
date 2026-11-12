@@ -39,8 +39,34 @@ Todas as mudancas relevantes deste pacote sao documentadas aqui. O formato segue
   municipio e demais parametros de caminho sao validados antes da rede.
 - `gunzipBase64Flexivel` para respostas em Base64 simples ou duplo.
 
+- **Catalogo oficial de rejeicoes**: `explicarRejeicao`, `explicarErros`,
+  `buscarRejeicao` e `listarRejeicoes` trazem a mensagem, a regra, o campo e o
+  nivel de cada codigo, gerados dos anexos oficiais do gov.br (Anexo I v1.01 de
+  09/02/2026 e Anexo II v1.01 de 22/01/2026). O catalogo pode ser regenerado com
+  `scripts/build-rejection-catalog.mjs`.
+- **`@useinvio/nfse-sdk/testing`**: `createTestCertificate` (A1 autoassinado com
+  CNPJ/CPF nos campos ICP-Brasil) e `installMockSefin` (SEFIN e ADN simulados no
+  processo, que validam XSD e assinatura e permitem simular rejeicoes, falhas de
+  rede e respostas perdidas).
+- **Servidor MCP** sem dependencias: `@useinvio/nfse-sdk/mcp`
+  (`createNfseMcpServer`, `runNfseMcpStdio`), o bin `nfse-mcp` e o pacote
+  `@useinvio/nfse-mcp` em `mcp/`, com `server.json` para o MCP Registry.
+  Configuracao por variaveis de ambiente; escrita desligada por padrao; modo de
+  teste com `NFSE_MCP_MOCK=1`.
+- **Ferramentas de agente**: `explain_rejection`, `recover_nfse_by_dps` e
+  `createNfseAgentToolkit({ allowWrite })`, que adiciona emissao e cancelamento em
+  duas etapas (`prepare_*` e `confirm_*`, com ids de uso unico que expiram). Um
+  `confirm_nfse_emission` repetido apos falha de rede consulta a DPS antes de
+  reenviar. Issues da SEFIN agora trazem a regra oficial em `suggestion`.
+- Plugin do Claude Code (`plugin/`, com a skill `nfse-nacional`) e marketplace em
+  `.claude-plugin/marketplace.json`.
+- `AGENTS.md` para agentes que alteram o repositorio. `llms.txt` passa a ser o
+  guia de uso da API para assistentes de codigo.
+
 ### Fixed
 
+- `verifyDps` retorna `false` para assinatura invalida ou XML adulterado, como
+  documentado. Com `xml-crypto` 6 a funcao lancava excecao.
 - `enviarEvento` agora envia o campo oficial `pedidoRegistroEventoXmlGZipB64`.
   Antes enviava `pedRegXmlGZipB64`, que a SEFIN nao reconhece.
 

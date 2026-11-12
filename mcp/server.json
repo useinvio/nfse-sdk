@@ -1,0 +1,27 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.useinvio/nfse-mcp",
+  "title": "NFS-e Nacional",
+  "description": "Validate, emit, query and cancel Brazil's NFS-e Nacional (SEFIN) service invoices.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/useinvio/nfse-sdk",
+    "source": "github",
+    "subfolder": "mcp"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@useinvio/nfse-mcp",
+      "version": "0.1.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        { "name": "NFSE_CERT_PATH", "description": "Path to the ICP-Brasil A1 certificate (.pfx). Omit to run only the tools that need no certificate.", "format": "filepath" },
+        { "name": "NFSE_CERT_PASSWORD", "description": "Password of the A1 certificate.", "isSecret": true },
+        { "name": "NFSE_AMBIENTE", "description": "SEFIN environment. 'producao' issues legally valid invoices.", "default": "restrita", "choices": ["restrita", "producao"] },
+        { "name": "NFSE_MCP_ALLOW_WRITE", "description": "Set to 1 to enable prepare/confirm tools that emit and cancel invoices.", "default": "0", "choices": ["0", "1"] },
+        { "name": "NFSE_MCP_MOCK", "description": "Set to 1 to use an in-process mock SEFIN and a test certificate (no real calls).", "default": "0", "choices": ["0", "1"] }
+      ]
+    }
+  ]
+}

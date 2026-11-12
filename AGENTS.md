@@ -1,0 +1,83 @@
+# AGENTS.md
+
+Guidance for AI coding agents working **on** this repository. To use the SDK
+from another project, read [`llms.txt`](./llms.txt) instead.
+
+## What this is
+
+`@useinvio/nfse-sdk` is the protocol layer for Brazil's NFS-e Nacional: DPS and
+event XML, official XSD validation (libxml2 in WebAssembly), XMLDSIG, GZip/Base64,
+mTLS to SEFIN and ADN, typed results and errors. It must not become a tax
+engine: never add fiscal defaults or choose codes for the user.
+
+## Commands
+
+```bash
+npm install
+npm run typecheck            # library
+npm run typecheck:examples   # examples/*.ts against the source
+npm test                     # build + all tests (node:test), including the MCP stdio interop test
+npm pack --dry-run           # what gets published
+```
+
+All tests run offline: the SEFIN transport is mocked (`testing.ts` and `test/httpsMock.ts`).
+
+## Layout
+
+| Path | Role |
+|---|---|
+| `index.ts` | Public API. Everything exported here is supported. |
+| `client.ts` | `NfseClient` facade over the functions below. |
+| `dpsJson.ts`, `fiscalValidation.ts`, `dpsJsonSchema.ts`, `fiscalDomains.ts` | JSON input, validation, JSON Schema, DPS XML builder. |
+| `emissaoNota.ts` | Emission flow: prepare (XSD, validity, sign, verify) and transmit. |
+| `eventoJson.ts`, `eventosNfse.ts` | Cancellation events: builders and send flow. |
+| `consultas.ts`, `nfseXml.ts` | Typed query, recovery by DPS id, NFS-e XML reader. |
+| `sefinClient.ts` | The only module that does network I/O: endpoints, timeouts, GET retries, path validation, metrics, test transport seam. |
+| `certificate.ts`, `certificateValidation.ts`, `loadPfx.ts` | `NfseCertificate` and certificate checks. |
+| `xsdValidation.ts`, `xmlInspection.ts`, `signXml.ts`, `xmlBuild.ts`, `gzipB64.ts` | XML, XSD and crypto helpers. |
+| `rejeicoes.ts`, `rejeicoesCatalog.ts` | Official rejection catalog. The catalog is generated; see below. |
+| `agent.ts` | Framework-neutral agent tools and the prepare/confirm toolkit. |
+| `mcpServer.ts`, `mcpCli.ts` | Dependency-free MCP stdio server and its CLI. |
+| `testing.ts` | Public test helpers: `createTestCertificate`, `installMockSefin`. |
+| `mcp/` | The `@useinvio/nfse-mcp` wrapper package (a bin that calls `mcpServer.ts`). |
+| `plugin/`, `.claude-plugin/marketplace.json` | Claude Code plugin (skill + MCP server) and its marketplace. |
+| `docs/` | pt-BR docs: `tutoriais/`, `guias/`, `referencia/`, `conceitos/`. |
+| `schemas/` | Official XSD v1.01. Never edit these files. |
+
+## Rules
+
+- **Fiscal neutrality.** No silent defaults for `tributacaoMunicipal`, `totTrib`,
+  `cTribNac` or regime. Reject unsupported shapes instead of guessing.
+- **Certificates.** Accept `CertificateInput` and go through `resolveCredentials`.
+  Never log, serialize or return key material, PFX bytes or passwords.
+- **Network.** Only `sefinClient.ts` talks to the network. POSTs are never retried.
+  Validate every URL path parameter before the request.
+- **XML order** follows the XSD; tests compare snippets. Every generated XML must
+  pass `validateDpsXmlAgainstXsd` or `validatePedRegEventoXmlAgainstXsd`.
+- **Agent tools.** Certificate and environment come from `NfseAgentContext`, never
+  from tool input. Anything that sends to SEFIN must be a `confirm_*` tool behind
+  a `prepare_*` step and `allowWrite`.
+- **Public API.** Keep names exported by `index.ts` stable. A new export needs a
+  test, an entry in `docs/referencia/api.md` and, when relevant, `llms.txt`.
+- **Docs.** README stays short; details go to `docs/`. `test/documentation.test.ts`
+  checks snippet payloads against the XSD, imported names and every relative link.
+
+## Rejection catalog
+
+`rejeicoesCatalog.ts` is generated from the official gov.br annexes. To update it,
+download the current `anexo_i-...xlsx` and `anexo_ii-...xlsx` from
+<https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual>
+and run:
+
+```bash
+node scripts/build-rejection-catalog.mjs "anexo_i.xlsx|Anexo I ... v1.01 (09/02/2026)|<url>" "anexo_ii.xlsx|Anexo II ... v1.01 (22/01/2026)|<url>"
+```
+
+Never edit the generated file by hand, and keep the official text verbatim.
+
+## Releases
+
+The SDK publishes from `publish.yml` on a tag matching `package.json`. The MCP
+wrapper in `mcp/` depends on the SDK version that contains `mcpServer.ts`, so
+publish the SDK first, then `mcp/` (`npm publish` from that folder), then update
+`mcp/server.json` in the MCP Registry.

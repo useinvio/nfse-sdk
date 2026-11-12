@@ -258,6 +258,38 @@ export function createSefinLatencyTracker(options: SefinLatencyTrackerOptions = 
   };
 }
 
+/** @internal Request seen by an in-process transport (see `@useinvio/nfse-sdk/testing`). */
+export interface SefinTransportRequest {
+  method: 'GET' | 'POST';
+  url: URL;
+  headers: Record<string, string | number>;
+  body?: string;
+  certificate: CertificateInput;
+  signal?: AbortSignal;
+}
+
+/** @internal */
+export interface SefinTransportResponse {
+  status: number;
+  contentType?: string;
+  body?: Buffer | string;
+}
+
+/** @internal */
+export type SefinTransport = (request: SefinTransportRequest) => Promise<SefinTransportResponse>;
+
+let sefinTransport: SefinTransport | undefined;
+
+/**
+ * @internal Replaces HTTPS with an in-process transport and returns the previous
+ * one. Used by `installMockSefin`; never needed in production code.
+ */
+export function setSefinTransport(transport: SefinTransport | undefined): SefinTransport | undefined {
+  const previous = sefinTransport;
+  sefinTransport = transport;
+  return previous;
+}
+
 /**
  * Requisição mTLS de baixo nível ao SefinNacional, retornando o corpo bruto (Buffer).
  * Usa key+cert PEM (ou o agente mTLS dedicado de `NfseCertificate`) no handshake;
@@ -305,6 +337,25 @@ function sefinRequest(
         durationMs: performance.now() - startedAt,
       });
     };
+
+    if (sefinTransport) {
+      const base = { operation: metricOpts.operation, ambiente: metricOpts.ambiente, method: opts.method, pathTemplate: metricOpts.pathTemplate };
+      sefinTransport({ method: opts.method, url, headers, body: payload, certificate, signal: requestOptions.signal }).then(
+        (res) => {
+          emitMetric({ ...base, status: res.status, success: res.status >= 200 && res.status < 300 });
+          resolve({
+            status: res.status,
+            contentType: res.contentType ?? 'application/json',
+            buffer: Buffer.isBuffer(res.body) ? res.body : Buffer.from(res.body ?? ''),
+          });
+        },
+        (error: Error) => {
+          emitMetric({ ...base, success: false, errorName: error.name, errorMessage: error.message });
+          reject(error);
+        },
+      );
+      return;
+    }
 
     const req = https.request(options, (res) => {
       const chunks: Buffer[] = [];

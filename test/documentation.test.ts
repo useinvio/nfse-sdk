@@ -5,6 +5,8 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as sdk from '../index.js';
 import * as agent from '../agent.js';
+import * as mcp from '../mcpServer.js';
+import * as testing from '../testing.js';
 import { buildDpsFromJson, NfseClient, validateDpsXmlAgainstXsd, type CreateInvoiceInput, type DpsJsonRequest, type NfseClientDpsDefaults, type PfxMaterial } from '../index.js';
 
 const IGNORED_DIRS = new Set(['node_modules', 'dist', 'dist-test', '.git', 'schemas', '.claude']);
@@ -85,6 +87,8 @@ test('Markdown examples only import names the package exports', () => {
   const modules: Record<string, Record<string, unknown>> = {
     '@useinvio/nfse-sdk': sdk,
     '@useinvio/nfse-sdk/agent': agent,
+    '@useinvio/nfse-sdk/mcp': mcp,
+    '@useinvio/nfse-sdk/testing': testing,
   };
   const missing: string[] = [];
   for (const file of FILES) {
