@@ -1,0 +1,76 @@
+name: Playground
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'playground/src/**'
+      - 'scripts/build-playground.mjs'
+      - 'cliExample.ts'
+      - 'dpsJson.ts'
+      - 'fiscalValidation.ts'
+      - 'fiscalDomains.ts'
+      - 'dpsNormalization.ts'
+      - 'decimal.ts'
+      - 'xmlBuild.ts'
+      - 'config.ts'
+      - 'rejeicoes.ts'
+      - 'rejeicoesCatalog.ts'
+      - 'package-lock.json'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build playground
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build playground
+        run: npm run build:playground
+
+      - name: Prepare site
+        run: |
+          mkdir -p _site
+          cp playground/index.html _site/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
