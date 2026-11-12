@@ -9,6 +9,7 @@ export { SEFIN_BASE_URL, TP_AMB, DEFAULT_AMBIENTE, resolveSefinBaseUrl } from '.
 export type { Ambiente } from './config.js';
 
 export {
+  ChaveAcessoInvalidaError,
   consultarNfse,
   createSefinLatencyTracker,
   enviarEvento,
@@ -84,9 +85,13 @@ export { gzipBase64, gunzipBase64 } from './gzipB64.js';
 
 export { signDps, signEnveloped, verifyDps, withUtf8XmlDeclaration } from './signXml.js';
 
-export { DpsXsdValidationError, XmllintUnavailableError, validateDpsXmlAgainstXsd } from './xsdValidation.js';
+export { DpsXsdValidationError, XmllintUnavailableError, XsdEngineUnavailableError, validateDpsXmlAgainstXsd } from './xsdValidation.js';
 
 export { loadPfxFromBuffer, loadPfx } from './loadPfx.js';
 export type { PfxMaterial } from './loadPfx.js';
 
 export { assertCertificateValidity, assertCertificateForProvider, CertificateValidationError } from './certificateValidation.js';
+export type { CertificateValidationCode } from './certificateValidation.js';
+
+export { NfseCertificate, NFSE_CERT_ENV } from './certificate.js';
+export type { CertificateInput, NfseCertificateFromPemInput, NfseCertificateInfo } from './certificate.js';

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { cpSync, readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { cpSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
-import { buildDpsFromJson, type DpsJsonRequest } from '../index.js';
+import { buildDpsFromJson, validateDpsXmlAgainstXsd, type DpsJsonRequest } from '../index.js';
 
 const schemaDir = resolve('schemas/nfse/v1.01/Schemas/1.01');
 
@@ -74,15 +74,36 @@ const request: DpsJsonRequest = {
   },
 };
 
-function assertValidatesAgainstXsd(xml: string): void {
-  const dir = mkdtempSync(join(tmpdir(), 'nfse-sdk-xsd-'));
-  const schemaPath = prepareXmllintSchemaDir(dir);
-  const xmlPath = join(dir, 'dps.xml');
-  writeFileSync(xmlPath, xml);
+function hasXmllint(): boolean {
+  try {
+    execFileSync('xmllint', ['--version'], { stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-  assert.doesNotThrow(() => {
-    execFileSync('xmllint', ['--noout', '--schema', schemaPath, xmlPath], { stdio: 'pipe' });
-  });
+const xmllintOracle = hasXmllint();
+
+/**
+ * Validates with the SDK's embedded engine and, when the system `xmllint` is
+ * installed (as in CI), cross-checks with it as an independent oracle.
+ */
+function assertValidatesAgainstXsd(xml: string): void {
+  assert.doesNotThrow(() => validateDpsXmlAgainstXsd(xml));
+  if (!xmllintOracle) return;
+
+  const dir = mkdtempSync(join(tmpdir(), 'nfse-sdk-xsd-'));
+  try {
+    const schemaPath = prepareXmllintSchemaDir(dir);
+    const xmlPath = join(dir, 'dps.xml');
+    writeFileSync(xmlPath, xml);
+    assert.doesNotThrow(() => {
+      execFileSync('xmllint', ['--noout', '--schema', schemaPath, xmlPath], { stdio: 'pipe' });
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 test('generated DPS XML validates against the official NFS-e Nacional v1.01 XSD', () => {

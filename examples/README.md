@@ -12,4 +12,4 @@ The payloads in `payloads.ts` are shared by these examples and exercised by the 
 - [`client-resource.ts`](./client-resource.ts): use `NfseClient` with certificate and defaults configured once.
 - [`handle-errors.ts`](./handle-errors.ts): normalize SEFIN rejection details for your application.
 
-The examples assume Node.js 20+ and a valid A1/PFX certificate. They are intentionally explicit about fiscal fields; the SDK does not infer municipal taxation, withholding, CST or total tax burden.
+The examples assume Node.js 20+ and a valid A1/PFX certificate, loaded with `NfseCertificate.fromEnv()` from `NFSE_CERT_PATH` (or `NFSE_CERT_BASE64`) and `NFSE_CERT_PASSWORD` (or `NFSE_CERT_PASSWORD_FILE`). They are intentionally explicit about fiscal fields; the SDK does not infer municipal taxation, withholding, CST or total tax burden.

@@ -27,7 +27,8 @@ export function loadPfx(pfxPath: string, password: string): PfxMaterial {
   return parsePfx(pfxBuffer, password);
 }
 
-function parsePfx(pfxBuffer: Buffer, password: string): PfxMaterial {
+/** @internal Shared PKCS#12 parser; prefer `NfseCertificate.fromPfx` in application code. */
+export function parsePfx(pfxBuffer: Buffer, password: string): PfxMaterial {
   const p12Der = forge.util.createBuffer(pfxBuffer.toString('binary'));
   const p12Asn1 = forge.asn1.fromDer(p12Der);
   const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, password);

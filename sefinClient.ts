@@ -1,12 +1,26 @@
 import https from 'node:https';
 import { performance } from 'node:perf_hooks';
 import { resolveSefinBaseUrl } from './config.js';
-import type { PfxMaterial } from './loadPfx.js';
+import { resolveCredentials, type CertificateInput } from './certificate.js';
 import type { Ambiente } from './config.js';
 
 /** Evita que uma conexao travada com o SEFIN prenda um worker indefinidamente. */
 const SEFIN_REQUEST_TIMEOUT_MS = 60_000;
 export const SEFIN_LATENCY_METRICS_ENV = 'NFSE_SEFIN_LATENCY_METRICS';
+
+/** The access key is not 50 digits; raised before any network I/O so it never reaches the URL path. */
+export class ChaveAcessoInvalidaError extends Error {
+  readonly code = 'CHAVE_ACESSO_INVALID_FORMAT';
+  constructor(public readonly chaveAcesso: string) {
+    super('chaveAcesso deve ter exatamente 50 digitos numericos.');
+    this.name = 'ChaveAcessoInvalidaError';
+  }
+}
+
+function assertChaveAcesso(chave: unknown): string {
+  if (typeof chave !== 'string' || !/^\d{50}$/.test(chave)) throw new ChaveAcessoInvalidaError(String(chave));
+  return chave;
+}
 
 export interface SefinErro {
   Codigo: string;
@@ -202,11 +216,12 @@ export function createSefinLatencyTracker(options: SefinLatencyTrackerOptions = 
 
 /**
  * Requisição mTLS de baixo nível ao SefinNacional, retornando o corpo bruto (Buffer).
- * Usa key+cert PEM no handshake (o .pfx legado ICP-Brasil é rejeitado pelo TLS do Node).
+ * Usa key+cert PEM (ou o agente mTLS dedicado de `NfseCertificate`) no handshake;
+ * o .pfx legado ICP-Brasil é rejeitado pelo TLS do Node.
  */
 function sefinRequest(
   opts: RequestOpts,
-  pfx: PfxMaterial,
+  certificate: CertificateInput,
   metricOpts: RequestMetricOpts,
   baseOverride?: string,
 ): Promise<SefinRespostaRaw> {
@@ -227,8 +242,7 @@ function sefinRequest(
     port: url.port || 443,
     path: url.pathname + url.search,
     headers,
-    key: pfx.privateKeyPem,
-    cert: pfx.certPem,
+    ...resolveCredentials(certificate).tls,
     rejectUnauthorized: true,
     timeout: SEFIN_REQUEST_TIMEOUT_MS,
   };
@@ -341,7 +355,7 @@ export function extrairErros(body: any): SefinErro[] {
 /** SefinNacional · POST /nfse — transporte baixo nivel de DPS ja compactada em GZip+Base64. */
 export async function transmitirDpsCompactada(
   dpsXmlGZipB64: string,
-  pfx: PfxMaterial,
+  pfx: CertificateInput,
   ambiente?: Ambiente,
 ): Promise<SefinResposta> {
   const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
@@ -354,7 +368,8 @@ export async function transmitirDpsCompactada(
 }
 
 /** SefinNacional · GET /nfse/{chave} — consulta a NFS-e pela chave de acesso (50 dígitos). */
-export async function consultarNfse(chave: string, pfx: PfxMaterial, ambiente?: Ambiente): Promise<SefinResposta> {
+export async function consultarNfse(chave: string, pfx: CertificateInput, ambiente?: Ambiente): Promise<SefinResposta> {
+  assertChaveAcesso(chave);
   const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
   return parseJson(await sefinRequest(
     { method: 'GET', path: `/nfse/${chave}` },
@@ -367,10 +382,11 @@ export async function consultarNfse(chave: string, pfx: PfxMaterial, ambiente?: 
 /** SefinNacional · POST /nfse/{chave}/eventos — registra evento fiscal da NFS-e. */
 export async function enviarEvento(
   pedRegXmlGZipB64: string,
-  pfx: PfxMaterial,
+  pfx: CertificateInput,
   chaveAcesso: string,
   ambiente?: Ambiente,
 ): Promise<SefinResposta> {
+  assertChaveAcesso(chaveAcesso);
   const base = ambiente ? resolveSefinBaseUrl(ambiente) : undefined;
   return parseJson(
     await sefinRequest(

@@ -1,12 +1,10 @@
-import { NfseClient } from '@useinvio/nfse-sdk';
+import { NfseCertificate, NfseClient } from '@useinvio/nfse-sdk';
 import { nationalInvoice } from './payloads.js';
 
 const client = new NfseClient({
   environment: 'sandbox',
-  certificate: {
-    content: process.env.NFSE_CERTIFICATE_BASE64!,
-    password: process.env.NFSE_CERTIFICATE_PASSWORD!,
-  },
+  // NFSE_CERT_PATH or NFSE_CERT_BASE64, plus NFSE_CERT_PASSWORD or NFSE_CERT_PASSWORD_FILE
+  certificate: NfseCertificate.fromEnv(),
   defaults: { prestador: nationalInvoice.prestador, servico: nationalInvoice.servico },
 });
 

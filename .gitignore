@@ -1,3 +1,9 @@
 dist/
 dist-test/
 node_modules/
+
+# Never commit A1 certificates or their passwords
+*.pfx
+*.p12
+.env
+.env.*

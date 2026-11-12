@@ -2,7 +2,8 @@ import { DEFAULT_AMBIENTE } from './config.js';
 import type { Ambiente } from './config.js';
 import type { DpsJsonInput, DpsJsonRequest, PrestadorProfile, ServicoProfile } from './dpsJson.js';
 import { emitirNfse, type ResultadoEmissaoNota } from './emissaoNota.js';
-import { loadPfxFromBuffer, type PfxMaterial } from './loadPfx.js';
+import { NfseCertificate, type CertificateInput } from './certificate.js';
+import type { PfxMaterial } from './loadPfx.js';
 import { consultarNfse, type SefinResposta } from './sefinClient.js';
 
 export type NfseEnvironment = 'sandbox' | 'production' | Ambiente;
@@ -29,7 +30,8 @@ export interface GetInvoiceOptions {
 
 export interface NfseClientOptions {
   environment?: NfseEnvironment;
-  certificate: NfseCertificateInput | PfxMaterial;
+  /** Prefer `NfseCertificate.fromEnv()` / `fromFile()`; raw PFX content and legacy `PfxMaterial` are also accepted. */
+  certificate: NfseCertificateInput | NfseCertificate | PfxMaterial;
   defaults?: NfseClientDpsDefaults;
 }
 
@@ -45,7 +47,7 @@ function resolveEnvironment(environment: NfseEnvironment | undefined): Ambiente 
   return environment;
 }
 
-function isPfxMaterial(value: NfseCertificateInput | PfxMaterial): value is PfxMaterial {
+function isPfxMaterial(value: NfseClientOptions['certificate']): value is PfxMaterial {
   return 'privateKeyPem' in value && 'certPem' in value && 'pfxBuffer' in value;
 }
 
@@ -73,14 +75,15 @@ export class NfseClient {
   public readonly invoices: InvoiceResource;
 
   private readonly ambiente: Ambiente;
-  private readonly pfx: PfxMaterial;
+  private readonly pfx: CertificateInput;
   private readonly defaults: NfseClientDpsDefaults;
 
   constructor(options: NfseClientOptions) {
     this.ambiente = resolveEnvironment(options.environment);
-    this.pfx = isPfxMaterial(options.certificate)
-      ? options.certificate
-      : loadPfxFromBuffer(decodeCertificateContent(options.certificate), options.certificate.password);
+    const { certificate } = options;
+    this.pfx = certificate instanceof NfseCertificate || isPfxMaterial(certificate)
+      ? certificate
+      : NfseCertificate.fromPfx(decodeCertificateContent(certificate), certificate.password);
     this.defaults = options.defaults ?? {};
     this.invoices = {
       create: (input) => this.createInvoice(input),

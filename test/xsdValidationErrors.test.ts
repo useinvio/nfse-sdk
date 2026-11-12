@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,6 +8,7 @@ import {
   DpsXsdValidationError,
   validateDpsXmlAgainstXsd,
   XmllintUnavailableError,
+  XsdEngineUnavailableError,
   type DpsJsonRequest,
 } from '../index.js';
 
@@ -73,23 +74,15 @@ function withPath<T>(path: string, fn: () => T): T {
   }
 }
 
-test('missing xmllint executable throws XmllintUnavailableError, not a fiscal XSD error', () => {
+test('XSD validation runs in-process and does not need xmllint on PATH', () => {
   const { xml } = buildDpsFromJson(request);
   const emptyPathDir = mkdtempSync(join(tmpdir(), 'nfse-sdk-empty-path-'));
   try {
     withPath(emptyPathDir, () => {
+      assert.doesNotThrow(() => validateDpsXmlAgainstXsd(xml));
       assert.throws(
-        () => validateDpsXmlAgainstXsd(xml),
-        (error: unknown) => {
-          assert.ok(error instanceof XmllintUnavailableError, 'expected XmllintUnavailableError');
-          assert.ok(!(error instanceof DpsXsdValidationError));
-          assert.doesNotMatch(error.message, /^undefined$/);
-          assert.doesNotMatch(error.message, /: undefined$/);
-          assert.match(error.message, /xmllint/i);
-          const cause = (error as XmllintUnavailableError).cause as { code?: string };
-          assert.equal(cause?.code, 'ENOENT');
-          return true;
-        },
+        () => validateDpsXmlAgainstXsd(xml.replace('<tpAmb>2</tpAmb>', '<tpAmb>9</tpAmb>')),
+        DpsXsdValidationError,
       );
     });
   } finally {
@@ -97,34 +90,25 @@ test('missing xmllint executable throws XmllintUnavailableError, not a fiscal XS
   }
 });
 
-test('xmllint failure without stderr is reported as infrastructure failure, preserving diagnostics', () => {
-  const { xml } = buildDpsFromJson(request);
-  const fakeBinDir = mkdtempSync(join(tmpdir(), 'nfse-sdk-fake-bin-'));
-  const fakeXmllintPath = join(fakeBinDir, 'xmllint');
-  // Simulates a crash that exits non-zero without writing anything to stderr,
-  // e.g. an incompatible xmllint build or a killed subprocess.
-  writeFileSync(fakeXmllintPath, '#!/bin/sh\nexit 7\n');
-  chmodSync(fakeXmllintPath, 0o755);
-  try {
-    withPath(fakeBinDir, () => {
-      assert.throws(
-        () => validateDpsXmlAgainstXsd(xml),
-        (error: unknown) => {
-          assert.ok(error instanceof XmllintUnavailableError, 'expected XmllintUnavailableError');
-          assert.ok(!(error instanceof DpsXsdValidationError));
-          assert.doesNotMatch(error.message, /^undefined$/);
-          assert.doesNotMatch(error.message, /: undefined$/);
-          assert.match(error.message, /sem stderr/i);
-          return true;
-        },
-      );
-    });
-  } finally {
-    rmSync(fakeBinDir, { recursive: true, force: true });
-  }
+test('malformed XML is a payload error, not an engine failure', () => {
+  assert.throws(
+    () => validateDpsXmlAgainstXsd('<DPS><infDPS></DPS>'),
+    (error: unknown) => {
+      assert.ok(error instanceof DpsXsdValidationError);
+      assert.ok(!(error instanceof XsdEngineUnavailableError));
+      assert.ok(error.details.length > 0);
+      return true;
+    },
+  );
 });
 
-test('an XML that really violates the v1.01 XSD throws DpsXsdValidationError with the xmllint diagnostic', () => {
+test('XmllintUnavailableError stays as a deprecated alias of XsdEngineUnavailableError', () => {
+  assert.equal(XmllintUnavailableError, XsdEngineUnavailableError);
+  const error = new XsdEngineUnavailableError('boom', new Error('cause'));
+  assert.ok(error instanceof XmllintUnavailableError);
+});
+
+test('an XML that really violates the v1.01 XSD throws DpsXsdValidationError with the libxml2 diagnostic', () => {
   const { xml } = buildDpsFromJson(request);
   // dhEmi expects an xs:dateTime; this value is well-formed XML but schema-invalid.
   const invalidXml = xml.replace(
