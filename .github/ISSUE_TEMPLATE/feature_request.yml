@@ -1,0 +1,21 @@
+name: Sugestão
+description: Uma operação da NFS-e Nacional, um campo do leiaute ou uma melhoria
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qual problema você quer resolver
+      description: O caso de uso, não só a solução.
+    validations:
+      required: true
+  - type: textarea
+    id: official
+    attributes:
+      label: Referência oficial
+      description: Nota técnica, anexo, campo do leiaute ou endpoint da SEFIN/ADN, quando houver.
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposta
+      description: Como você imagina a API. O SDK cuida do protocolo e não escolhe códigos fiscais pelo usuário.

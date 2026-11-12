@@ -1,0 +1,49 @@
+name: Bug
+description: Algo no SDK, na CLI ou no servidor MCP não funciona como documentado
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Nunca cole certificados, senhas, chaves privadas ou XMLs reais com dados de clientes.**
+        Para falhas de segurança, use o [relato privado](https://github.com/useinvio/nfse-sdk/security/advisories/new).
+  - type: textarea
+    id: what
+    attributes:
+      label: O que aconteceu
+      description: O que você esperava e o que aconteceu.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Como reproduzir
+      description: Código mínimo ou comando. Se possível, reproduza com `installMockSefin()` de `@useinvio/nfse-sdk/testing`.
+      render: ts
+    validations:
+      required: true
+  - type: textarea
+    id: sefin
+    attributes:
+      label: Resposta da SEFIN (se houver)
+      description: Status HTTP e `error.erros` (código e descrição), sem dados pessoais.
+      render: json
+  - type: input
+    id: version
+    attributes:
+      label: Versão do pacote
+      placeholder: "@useinvio/nfse-sdk 3.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: ambiente
+    attributes:
+      label: Ambiente
+      options: [restrita, producao, mock (testing), não se aplica]
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Node.js e sistema operacional
+      placeholder: Node 22.11, Ubuntu 24.04

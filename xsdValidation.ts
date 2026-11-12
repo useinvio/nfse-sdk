@@ -45,7 +45,7 @@ export class XsdEngineUnavailableError extends Error {
 }
 
 /**
- * @deprecated Since 3.2.0 the SDK no longer runs the `xmllint` binary.
+ * @deprecated Since 3.1.0 the SDK no longer runs the `xmllint` binary.
  * Kept as an alias so existing `instanceof XmllintUnavailableError` checks still work.
  */
 export const XmllintUnavailableError = XsdEngineUnavailableError;

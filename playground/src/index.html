@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Playground NFS-e Nacional</title>
+  <meta name="description" content="Monte o JSON de uma NFS-e Nacional, veja os problemas de validação e o XML da DPS gerado na hora. Tudo roda no navegador.">
+  <style>
+    :root {
+      --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1b; --muted: #5f5f5a; --border: #dcdcd6;
+      --accent: #0b6e4f; --accent-text: #ffffff; --error: #b42318; --error-bg: #fdecea;
+      --warning: #8a5a00; --warning-bg: #fff4dc; --ok: #0b6e4f; --ok-bg: #e5f4ee; --code-bg: #f1f1ed;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #141413; --surface: #1d1d1b; --text: #ecece8; --muted: #a3a39c; --border: #34342f;
+        --accent: #3fb68b; --accent-text: #0d1f17; --error: #ff8a80; --error-bg: #3a1c1a;
+        --warning: #f2c46d; --warning-bg: #3a2e14; --ok: #3fb68b; --ok-bg: #15302a; --code-bg: #232320;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #141413; --surface: #1d1d1b; --text: #ecece8; --muted: #a3a39c; --border: #34342f;
+      --accent: #3fb68b; --accent-text: #0d1f17; --error: #ff8a80; --error-bg: #3a1c1a;
+      --warning: #f2c46d; --warning-bg: #3a2e14; --ok: #3fb68b; --ok-bg: #15302a; --code-bg: #232320;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    a { color: var(--accent); }
+    header, main, footer { max-width: 1280px; margin: 0 auto; padding: 0 16px; }
+    header { padding-top: 24px; padding-bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; justify-content: space-between; }
+    h1 { font-size: 22px; margin: 0; }
+    header p { margin: 4px 0 0; color: var(--muted); }
+    nav { display: flex; gap: 16px; font-size: 14px; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding-bottom: 16px; }
+    @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+    section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; min-height: 0; }
+    .bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .bar h2 { font-size: 14px; margin: 0; }
+    textarea { flex: 1; min-height: 60vh; width: 100%; border: 0; resize: vertical; padding: 12px; background: transparent; color: var(--text); font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; tab-size: 2; }
+    textarea:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+    button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+    .status { font-size: 13px; padding: 2px 10px; border-radius: 999px; max-width: 100%; overflow-wrap: anywhere; }
+    .status.ok { background: var(--ok-bg); color: var(--ok); }
+    .status.error { background: var(--error-bg); color: var(--error); }
+    .status.warning { background: var(--warning-bg); color: var(--warning); }
+    [role="tablist"] { display: flex; gap: 4px; }
+    [role="tab"] { border: 0; background: transparent; color: var(--muted); padding: 6px 10px; border-bottom: 2px solid transparent; border-radius: 0; }
+    [role="tab"][aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+    .panel { padding: 12px; overflow: auto; flex: 1; min-height: 60vh; }
+    ul.issues { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .issue { border: 1px solid var(--border); border-left: 3px solid var(--error); border-radius: 6px; padding: 8px 10px; }
+    .issue.warning { border-left-color: var(--warning); }
+    .issue p { margin: 4px 0 0; }
+    .badge { font-size: 12px; font-weight: 600; color: var(--error); margin-right: 8px; }
+    .issue.warning .badge { color: var(--warning); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+    .path { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; }
+    .hint { color: var(--muted); font-size: 14px; }
+    .empty { color: var(--muted); }
+    pre { margin: 0; white-space: pre; background: var(--code-bg); padding: 12px; border-radius: 6px; overflow: auto; }
+    .label { color: var(--muted); font-size: 13px; }
+    input[type="search"] { font: inherit; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); width: 100%; max-width: 280px; }
+    #explanation h3 { margin: 12px 0 4px; }
+    .source { font-size: 13px; color: var(--muted); }
+    footer { color: var(--muted); font-size: 13px; padding-bottom: 32px; }
+    footer code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Playground NFS-e Nacional</h1>
+      <p>Edite o JSON da nota e veja a validação e o XML da DPS na hora. Nada sai do seu navegador.</p>
+    </div>
+    <nav aria-label="Links">
+      <a href="https://github.com/useinvio/nfse-sdk">GitHub</a>
+      <a href="https://www.npmjs.com/package/@useinvio/nfse-sdk">npm</a>
+      <a href="https://github.com/useinvio/nfse-sdk/blob/main/JSON_MAPPING.md">Campos do JSON</a>
+    </nav>
+  </header>
+  <main>
+    <section aria-labelledby="editor-title">
+      <div class="bar">
+        <h2 id="editor-title">DpsJsonRequest</h2>
+        <button id="reset" type="button">Restaurar exemplo</button>
+      </div>
+      <label for="editor" class="label" hidden>JSON da nota</label>
+      <textarea id="editor" spellcheck="false" autocomplete="off" aria-describedby="status"></textarea>
+    </section>
+    <section aria-label="Resultado">
+      <div class="bar">
+        <div role="tablist" aria-label="Resultado">
+          <button role="tab" id="tab-issues" data-tab="issues" aria-controls="panel-issues">Validação</button>
+          <button role="tab" id="tab-xml" data-tab="xml" aria-controls="panel-xml">XML da DPS</button>
+          <button role="tab" id="tab-explain" data-tab="explain" aria-controls="panel-explain">Rejeições</button>
+        </div>
+        <span id="status" class="status" role="status" aria-live="polite"></span>
+      </div>
+      <div class="panel" id="panel-issues" role="tabpanel" aria-labelledby="tab-issues">
+        <ul class="issues" id="issues"></ul>
+      </div>
+      <div class="panel" id="panel-xml" role="tabpanel" aria-labelledby="tab-xml" hidden>
+        <p><button id="copy" type="button" class="primary">Copiar XML</button></p>
+        <p class="hint">XML não assinado. O SDK confere o XSD oficial, assina e envia por mTLS no Node.js.</p>
+        <pre id="xml"></pre>
+      </div>
+      <div class="panel" id="panel-explain" role="tabpanel" aria-labelledby="tab-explain" hidden>
+        <label for="code" class="label">Código de rejeição da SEFIN (<span id="code-count"></span> no catálogo oficial)</label>
+        <p><input id="code" type="search" placeholder="E0014" autocomplete="off"></p>
+        <div id="explanation"></div>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <p>Para emitir de verdade: <code>npm install @useinvio/nfse-sdk</code>, depois <code>npx nfse init</code> e <code>npx nfse emit nota.json --mock</code>.
+    Os exemplos são ilustrativos: códigos de serviço e tributação vêm do seu prestador. Feito com <a href="https://github.com/useinvio/nfse-sdk">@useinvio/nfse-sdk</a>.</p>
+  </footer>
+  <script>/*__PLAYGROUND__*/</script>
+</body>
+</html>

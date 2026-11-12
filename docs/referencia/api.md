@@ -62,6 +62,11 @@ Tudo é importado da raiz do pacote, exceto as ferramentas de agente
 `consultarRetencoes`, `consultarBeneficio`. Assinaturas e endpoints em
 [Distribuição e parâmetros municipais](../guias/adn.md).
 
+## Linha de comando
+
+`nfse` (bin): `init`, `doctor`, `cert`, `validate`, `xml`, `emit`, `get`, `danfse`,
+`cancel`, `recover`, `explain`, `mcp`. Veja [Usar pelo terminal](../guias/cli.md).
+
 ## Rejeições
 
 | Função | Descrição |
@@ -70,6 +75,8 @@ Tudo é importado da raiz do pacote, exceto as ferramentas de agente
 | `explicarErros(erros)` | Explica todos os erros de uma rejeição. |
 | `buscarRejeicao(codigo)` / `listarRejeicoes()` | Acesso direto ao catálogo oficial. |
 | `REJEICOES_FONTES` | Anexos oficiais usados no catálogo, com URL. |
+
+Uma página por código: [docs/rejeicoes](../rejeicoes/README.md).
 
 ## Testes (`@useinvio/nfse-sdk/testing`)
 

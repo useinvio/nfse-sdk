@@ -59,6 +59,8 @@ gov.br/nfse (Anexo I v1.01 de 09/02/2026, DPS e NFS-e; Anexo II v1.01 de
 22/01/2026, eventos), com o texto oficial sem alterações. Um código fora do
 catálogo volta com `conhecida: false`: não há causa inventada.
 `buscarRejeicao(codigo)` e `listarRejeicoes()` dão acesso direto às regras.
+Cada código também tem uma página: [docs/rejeicoes](../rejeicoes/README.md). No
+terminal: `npx nfse explain E0014`.
 
 ## Normalizar o corpo da resposta
 

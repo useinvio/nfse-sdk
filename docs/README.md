@@ -20,6 +20,7 @@ tarefas específicas e a referência para consultar detalhes.
 | [Tratar rejeições e erros](guias/rejeicoes.md) | O que cada erro significa e o que fazer. |
 | [Timeouts e novas tentativas](guias/timeouts.md) | `timeoutMs`, `retries`, `signal`. |
 | [Distribuição e parâmetros municipais](guias/adn.md) | NSU, convênio, alíquotas, regimes especiais. |
+| [Usar pelo terminal](guias/cli.md) | `nfse init`, `doctor`, `validate`, `emit`, `explain`. |
 | [Testar sem certificado](guias/testes.md) | SEFIN simulada e certificado de teste para o seu CI. |
 | [Agentes de IA e MCP](guias/agentes-ia.md) | Servidor MCP, plugin do Claude Code e ferramentas para o seu agente. |
 | [Métricas de latência](METRICS.md) | Observar a SEFIN em produção. |
@@ -31,6 +32,8 @@ tarefas específicas e a referência para consultar detalhes.
 - [Ambientes](referencia/ambientes.md): URLs e endpoints.
 - [Mapeamento do JSON da DPS](../JSON_MAPPING.md): cada campo de `DpsJsonRequest`.
 - [Matriz fiscal](FISCAL_MATRIX.md): combinações aceitas por regime.
+- [Códigos de rejeição](rejeicoes/README.md): uma página por código oficial da SEFIN.
+- [Playground](https://useinvio.github.io/nfse-sdk/): JSON → DPS no navegador, sem instalar nada.
 
 ## Conceitos
 
