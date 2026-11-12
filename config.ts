@@ -15,3 +15,13 @@ export const DEFAULT_AMBIENTE: Ambiente = 'restrita';
 export function resolveSefinBaseUrl(ambiente: Ambiente = DEFAULT_AMBIENTE): string {
   return SEFIN_BASE_URL[ambiente];
 }
+
+/** Ambiente de Dados Nacional: DANFSe, distribuicao por NSU e parametros municipais. */
+export const ADN_BASE_URL: Record<Ambiente, string> = {
+  producao: 'https://adn.nfse.gov.br',
+  restrita: 'https://adn.producaorestrita.nfse.gov.br',
+};
+
+export function resolveAdnBaseUrl(ambiente: Ambiente = DEFAULT_AMBIENTE): string {
+  return ADN_BASE_URL[ambiente];
+}

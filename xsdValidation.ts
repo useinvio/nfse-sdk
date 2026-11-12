@@ -20,6 +20,14 @@ export class DpsXsdValidationError extends Error {
   }
 }
 
+/** The pedRegEvento XML violates the NFS-e v1.01 event XSD. */
+export class PedRegEventoXsdValidationError extends Error {
+  constructor(public readonly details: string[]) {
+    super(`XML do pedido de registro de evento invalido para o XSD v1.01: ${details.join('; ')}`);
+    this.name = 'PedRegEventoXsdValidationError';
+  }
+}
+
 /**
  * The embedded XSD engine (libxml2 compiled to WebAssembly) could not load the
  * official schemas or crashed. This is an infrastructure problem, not proof
@@ -46,12 +54,14 @@ export type XmllintUnavailableError = XsdEngineUnavailableError;
 
 /** Virtual URL scheme for the bundled schemas, so includes never touch disk or network. */
 const SCHEMA_URL_PREFIX = 'nfse-sdk-xsd://v1.01/';
-const ENTRY_SCHEMA = 'DPS_v1.01.xsd';
+const DPS_SCHEMA = 'DPS_v1.01.xsd';
+const PED_REG_EVENTO_SCHEMA = 'pedRegEvento_v1.01.xsd';
 
 /** Never load DTDs, external entities or network resources while parsing. */
 export const SAFE_PARSE_OPTIONS = ParseOption.XML_PARSE_NONET | ParseOption.XML_PARSE_NO_XXE;
 
-let compiledValidator: XsdValidator | undefined;
+const compiledValidators = new Map<string, XsdValidator>();
+let schemaBuffers: Record<string, Uint8Array> | undefined;
 
 function schemaSourceDir(): string {
   return fileURLToPath(new URL('../schemas/nfse/v1.01/Schemas/1.01/', import.meta.url));
@@ -74,18 +84,22 @@ function loadSchemaBuffers(): Record<string, Uint8Array> {
   return buffers;
 }
 
-/** Compiles the official schemas once per process; later calls reuse the validator. */
-function getValidator(): XsdValidator {
-  if (compiledValidator) return compiledValidator;
+/** Compiles each official entry schema once per process; later calls reuse the validator. */
+function getValidator(entrySchema: string): XsdValidator {
+  const cached = compiledValidators.get(entrySchema);
+  if (cached) return cached;
   let schemaDoc: XmlDocument | undefined;
   try {
-    const buffers = loadSchemaBuffers();
-    const entry = buffers[`${SCHEMA_URL_PREFIX}${ENTRY_SCHEMA}`];
-    if (!entry) throw new Error(`${ENTRY_SCHEMA} nao encontrado em ${schemaSourceDir()}`);
-    xmlRegisterInputProvider(new XmlBufferInputProvider(buffers));
-    schemaDoc = XmlDocument.fromBuffer(entry, { url: `${SCHEMA_URL_PREFIX}${ENTRY_SCHEMA}`, option: SAFE_PARSE_OPTIONS });
-    compiledValidator = XsdValidator.fromDoc(schemaDoc);
-    return compiledValidator;
+    if (!schemaBuffers) {
+      schemaBuffers = loadSchemaBuffers();
+      xmlRegisterInputProvider(new XmlBufferInputProvider(schemaBuffers));
+    }
+    const entry = schemaBuffers[`${SCHEMA_URL_PREFIX}${entrySchema}`];
+    if (!entry) throw new Error(`${entrySchema} nao encontrado em ${schemaSourceDir()}`);
+    schemaDoc = XmlDocument.fromBuffer(entry, { url: `${SCHEMA_URL_PREFIX}${entrySchema}`, option: SAFE_PARSE_OPTIONS });
+    const validator = XsdValidator.fromDoc(schemaDoc);
+    compiledValidators.set(entrySchema, validator);
+    return validator;
   } catch (error) {
     throw new XsdEngineUnavailableError(
       `Nao foi possivel carregar os XSD oficiais v1.01: ${error instanceof Error ? error.message : String(error)}`,
@@ -107,14 +121,23 @@ function detailsOf(error: XmlLibError): string[] {
  * Runs in-process (libxml2 in WebAssembly): no `xmllint`, no temp files, no network.
  */
 export function validateDpsXmlAgainstXsd(xml: string): void {
-  const validator = getValidator();
+  validateAgainst(DPS_SCHEMA, xml, (details) => new DpsXsdValidationError(details));
+}
+
+/** Validates a pedRegEvento (cancellation, substitution, ...) against the official v1.01 event schema. */
+export function validatePedRegEventoXmlAgainstXsd(xml: string): void {
+  validateAgainst(PED_REG_EVENTO_SCHEMA, xml, (details) => new PedRegEventoXsdValidationError(details));
+}
+
+function validateAgainst(entrySchema: string, xml: string, payloadError: (details: string[]) => Error): void {
+  const validator = getValidator(entrySchema);
   let doc: XmlDocument | undefined;
   try {
     doc = XmlDocument.fromString(xml, { option: SAFE_PARSE_OPTIONS });
     validator.validate(doc);
   } catch (error) {
     if (error instanceof XmlValidateError || error instanceof XmlParseError) {
-      throw new DpsXsdValidationError(detailsOf(error));
+      throw payloadError(detailsOf(error));
     }
     throw new XsdEngineUnavailableError(
       `Falha no motor de validacao XSD: ${error instanceof Error ? error.message : String(error)}`,
