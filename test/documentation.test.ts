@@ -160,3 +160,12 @@ test('README stays short and every guide is reachable from the docs index', () =
     }
   }
 });
+
+test('rejection pages exist for every catalog code and nothing else', async () => {
+  const { listarRejeicoes } = await import('../rejeicoes.js');
+  const codes = listarRejeicoes().map((entry) => entry.codigo);
+  const pages = readdirSync(join('docs', 'rejeicoes')).filter((name) => name !== 'README.md').map((name) => name.replace(/\.md$/, ''));
+  assert.deepEqual(pages.sort(), [...codes].sort(), 'run `npm run build:rejection-pages`');
+  const sample = readFileSync(join('docs', 'rejeicoes', `${codes[0]}.md`), 'utf8');
+  assert.ok(sample.includes(listarRejeicoes()[0].mensagem.split('\n')[0]), 'pages carry the official message verbatim');
+});

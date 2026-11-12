@@ -83,6 +83,10 @@ mock.rejectNext('E0312'); mock.dropResponseNext(); // script rejections and drop
 mock.restore();
 ```
 
+## Command line
+
+`npx nfse init` (sample nota.json), `nfse doctor`, `nfse validate nota.json`, `nfse emit nota.json [--mock] [--producao] [--yes] [--json]`, `nfse get <chave>`, `nfse danfse <chave>`, `nfse cancel <chave> --motivo 1 --justificativa "..."`, `nfse recover <dpsId>`, `nfse explain E0014`. Exit codes: 0 ok, 1 error, 2 SEFIN rejection.
+
 ## AI agents and MCP
 
 - `npx -y @useinvio/nfse-mcp`: MCP stdio server. Env: certificate vars above, `NFSE_AMBIENTE`, `NFSE_MCP_ALLOW_WRITE=1` (emit/cancel), `NFSE_MCP_MOCK=1` (mock SEFIN).

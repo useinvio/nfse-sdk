@@ -4,10 +4,7 @@ Todas as mudancas relevantes deste pacote sao documentadas aqui. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa
 [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
-## [3.2.0] - 2026-11-12
-
-Primeira publicacao desde a 3.0.0: inclui tambem as mudancas listadas em 3.1.0,
-que nunca foi publicada no npm.
+## [3.2.0] - nao publicado
 
 ### Added
 
@@ -63,6 +60,14 @@ que nunca foi publicada no npm.
   reenviar. Issues da SEFIN agora trazem a regra oficial em `suggestion`.
 - Plugin do Claude Code (`plugin/`, com a skill `nfse-nacional`) e marketplace em
   `.claude-plugin/marketplace.json`.
+- **Linha de comando `nfse`**: `init`, `doctor`, `cert`, `validate`, `xml`, `emit`,
+  `get`, `danfse`, `cancel`, `recover`, `explain` e `mcp`, com `--mock`,
+  `--producao`, `--json` e confirmacao antes de emitir ou cancelar.
+- **Paginas de rejeicao**: `docs/rejeicoes/`, uma pagina por codigo oficial, geradas
+  do catalogo (`npm run build:rejection-pages`). Ficam fora do pacote npm.
+- **Playground** em `playground/index.html`: JSON da DPS, validacao, XML e explicacao
+  de rejeicoes no navegador, sem enviar nada (`npm run build:playground`).
+- `SECURITY.md`, formularios de issue e template de PR.
 - `AGENTS.md` para agentes que alteram o repositorio. `llms.txt` passa a ser o
   guia de uso da API para assistentes de codigo.
 
@@ -84,9 +89,7 @@ que nunca foi publicada no npm.
 - Links absolutos de maquina local em `docs/REGRAS_NEGOCIO_EMISSAO.md` viraram
   links relativos.
 
-## 3.1.0 - nao publicada
-
-Versao interna, distribuida como parte da 3.2.0.
+## [3.1.0] - 2026-11-12
 
 ### Added
 
@@ -165,7 +168,8 @@ em [docs/CORRECOES_EMISSAO.md](docs/CORRECOES_EMISSAO.md).
 
 Versoes anteriores: veja as [releases no GitHub](https://github.com/useinvio/nfse-sdk/releases).
 
-[3.2.0]: https://github.com/useinvio/nfse-sdk/compare/3.0.0...3.2.0
+[3.2.0]: https://github.com/useinvio/nfse-sdk/compare/3.1.0...HEAD
+[3.1.0]: https://github.com/useinvio/nfse-sdk/compare/3.0.0...3.1.0
 [3.0.0]: https://github.com/useinvio/nfse-sdk/releases/tag/3.0.0
 [2.2.0]: https://github.com/useinvio/nfse-sdk/releases/tag/2.2.0
 [2.1.0]: https://github.com/useinvio/nfse-sdk/releases/tag/2.1.0

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Rejeição da SEFIN (código E0000)
+    url: https://github.com/useinvio/nfse-sdk/tree/main/docs/rejeicoes
+    about: Veja a mensagem, a regra e o campo oficiais de cada código antes de abrir uma issue.
+  - name: Documentação
+    url: https://github.com/useinvio/nfse-sdk/tree/main/docs
+    about: Tutorial, guias e referência da API.

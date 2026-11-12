@@ -26,7 +26,8 @@ resposta oficial em formato estruturado. Sem binários nativos e sem `xmllint`.
 | Cancelar / cancelar por substituição | `cancelarNfse`, `cancelarNfsePorSubstituicao` | `invoices.cancel`, `invoices.cancelBySubstitution` |
 | Baixar o DANFSe em PDF | `baixarDanfse` | `invoices.danfse` |
 | Distribuição por NSU e parâmetros municipais (ADN) | `distribuirDfePorNsu`, `consultarAliquota`… | `distribution`, `municipalParameters` |
-| Explicar rejeições com o texto oficial | `explicarRejeicao`, `explicarErros` | – |
+| Explicar rejeições com o texto oficial | `explicarRejeicao`, `explicarErros`, [uma página por código](./docs/rejeicoes/README.md) | – |
+| Usar pelo terminal | `npx nfse init`, `doctor`, `validate`, `emit`, `explain` | – |
 | Testar sem certificado nem rede | `@useinvio/nfse-sdk/testing` | – |
 | Servidor MCP e ferramentas para agentes de IA | `npx -y @useinvio/nfse-mcp`, `@useinvio/nfse-sdk/agent` | – |
 
@@ -87,7 +88,12 @@ try {
 ```
 
 Primeira vez? Siga o [tutorial](./docs/tutoriais/primeira-nfse.md): emitir,
-consultar, baixar o PDF e cancelar na produção restrita, do zero.
+consultar, baixar o PDF e cancelar na produção restrita, do zero. Ou experimente
+sem certificado, pelo terminal:
+
+```bash
+npx nfse init && npx nfse emit nota.json --mock
+```
 
 ## Documentação
 
@@ -99,6 +105,7 @@ consultar, baixar o PDF e cancelar na produção restrita, do zero.
 | [Recuperar após timeout](./docs/guias/recuperar-emissao.md) | Sem notas duplicadas quando a conexão cai. |
 | [Cancelar](./docs/guias/cancelar.md) | e101101 e substituição (e105102). |
 | [Erros e rejeições](./docs/guias/rejeicoes.md) | O que cada erro significa e o que fazer. |
+| [Linha de comando](./docs/guias/cli.md) | `nfse doctor`, `emit`, `cancel`, `explain`. |
 | [Testar sem certificado](./docs/guias/testes.md) | SEFIN simulada para o seu CI. |
 | [Agentes de IA e MCP](./docs/guias/agentes-ia.md) | Servidor MCP, plugin do Claude Code, ferramentas para o seu agente. |
 | [Referência da API](./docs/referencia/api.md) | Todas as funções. |

@@ -37,6 +37,9 @@ jobs:
       - name: Typecheck examples
         run: npm run typecheck:examples
 
+      - name: Build playground
+        run: npm run build:playground
+
       - name: Test
         run: npm test
 

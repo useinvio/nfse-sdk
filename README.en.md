@@ -27,7 +27,8 @@ binaries and no `xmllint`.
 | Cancel / cancel by substitution | `cancelarNfse`, `cancelarNfsePorSubstituicao` | `invoices.cancel`, `invoices.cancelBySubstitution` |
 | Download the DANFSe PDF | `baixarDanfse` | `invoices.danfse` |
 | NSU distribution and municipal parameters (ADN) | `distribuirDfePorNsu`, `consultarAliquota`… | `distribution`, `municipalParameters` |
-| Explain rejections with the official text | `explicarRejeicao`, `explicarErros` | – |
+| Explain rejections with the official text | `explicarRejeicao`, `explicarErros`, [one page per code](./docs/rejeicoes/README.md) | – |
+| Command line | `npx nfse init`, `doctor`, `validate`, `emit`, `explain` | – |
 | Test without a certificate or network | `@useinvio/nfse-sdk/testing` | – |
 | MCP server and tools for AI agents | `npx -y @useinvio/nfse-mcp`, `@useinvio/nfse-sdk/agent` | – |
 

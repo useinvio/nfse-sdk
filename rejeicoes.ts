@@ -41,15 +41,15 @@ export interface ExplicacaoRejeicao {
 const BY_CODE = new Map(REJEICOES_OFICIAIS.map((entry) => [entry.codigo, entry]));
 
 const NIVEL_DICA: Record<number, string> = {
-  1: 'Regra de leiaute: corrija o formato ou a consistencia do campo indicado na DPS ou no evento.',
-  2: 'Regra nacional: confira o dado com o cadastro e a situacao do contribuinte no Sistema Nacional NFS-e.',
-  3: 'Regra municipal: confira os parametros do municipio (convenio, aliquota, regimes) com consultarConvenio/consultarAliquota.',
+  1: 'Regra de leiaute: corrija o formato ou a consistência do campo indicado na DPS ou no evento.',
+  2: 'Regra nacional: confira o dado com o cadastro e a situação do contribuinte no Sistema Nacional NFS-e.',
+  3: 'Regra municipal: confira os parâmetros do município (convênio, alíquota, regimes) com consultarConvenio/consultarAliquota.',
 };
 
 const SDK_CODES: Record<string, string> = {
-  INVALID_AUTHORIZATION_RESPONSE: 'A SEFIN respondeu 2xx sem XML autorizado valido. O resultado e incerto: use recuperarNfsePorDps antes de reenviar.',
+  INVALID_AUTHORIZATION_RESPONSE: 'A SEFIN respondeu 2xx sem XML autorizado válido. O resultado é incerto: use recuperarNfsePorDps antes de reenviar.',
   INVALID_QUERY_RESPONSE: 'A consulta respondeu sem o XML esperado. Tente novamente; se persistir, registre o corpo da resposta.',
-  DESCONHECIDO: 'A SEFIN respondeu sem um codigo de erro reconhecivel. Veja o corpo bruto da resposta.',
+  DESCONHECIDO: 'A SEFIN respondeu sem um código de erro reconhecível. Veja o corpo bruto da resposta.',
 };
 
 function normalizeCode(codigo: string): string {
