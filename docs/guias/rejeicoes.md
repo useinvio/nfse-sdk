@@ -42,6 +42,26 @@ try {
 | Erro de rede ou timeout | Talvez. | [Recupere pela DPS](recuperar-emissao.md) antes de reenviar. |
 | `XsdEngineUnavailableError` | Não: falha local de infraestrutura. | Tente de novo; não é rejeição fiscal. |
 
+## Explicar um código
+
+```ts
+import { explicarErros, explicarRejeicao } from '@useinvio/nfse-sdk';
+
+explicarRejeicao('E0014');
+// { codigo: 'E0014', conhecida: true, mensagemOficial: 'Conjunto de Série, Número, ...',
+//   regra: '...', campo: 'NFSe/infNFSe/DPS/infDPS/serie', nivel: 1, fonte: { documento, url } }
+
+explicarErros(error.erros); // uma explicação por erro de EmitirNotaError ou RegistrarEventoError
+```
+
+O catálogo tem as regras de rejeição dos anexos oficiais publicados em
+gov.br/nfse (Anexo I v1.01 de 09/02/2026, DPS e NFS-e; Anexo II v1.01 de
+22/01/2026, eventos), com o texto oficial sem alterações. Um código fora do
+catálogo volta com `conhecida: false`: não há causa inventada.
+`buscarRejeicao(codigo)` e `listarRejeicoes()` dão acesso direto às regras.
+
+## Normalizar o corpo da resposta
+
 `extrairErros(body)` normaliza os formatos de erro da SEFIN (`erros`, `Erros`,
 `erro`, objeto único) para `{ Codigo, Descricao, Complemento? }`.
 

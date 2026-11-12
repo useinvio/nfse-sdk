@@ -1,106 +1,96 @@
-# @useinvio/nfse-sdk LLM Guide
+# @useinvio/nfse-sdk
 
-This is a TypeScript SDK for Brazil's NFS-e Nacional (SEFIN). It handles the protocol layer for issuing, querying and cancelling national service invoices: DPS and event JSON/XML generation, XSD validation, XMLDSIG signing, GZip/Base64 compression, mTLS transport to SEFIN and the ADN (DANFSe, distribution, municipal parameters), and structured rejection extraction.
+> TypeScript SDK for Brazil's NFS-e Nacional (SEFIN/ADN). It issues, queries and cancels national service invoices: builds the DPS from JSON, validates it against the official XSD, signs it (XMLDSIG), sends it over mTLS with an ICP-Brasil A1 certificate, and returns SEFIN's answer as typed results and typed errors. It is not a tax engine: service codes, regime, tax blocks and DPS numbering always come from the user.
 
-It is not a fiscal decision engine. Do not infer tax codes, accounting rules, tenant state, invoice numbering policy, or legal advice from this SDK.
+This file is for AI assistants writing code that uses the package. To change the SDK itself, read `AGENTS.md` in the repository.
 
-## Start Here
-
-- `README.md` (pt-BR) and `README.en.md` (English): what the SDK does, install, a 60-second example.
-- `docs/README.md`: documentation index (pt-BR). `docs/tutoriais/` (first NFS-e end to end), `docs/guias/` (one task per page: certificate, emit, query, recover, cancel, errors, timeouts, ADN, AI agents), `docs/referencia/` (API, errors, environments), `docs/conceitos/como-funciona.md` (protocol flow and design).
-- `docs/METRICS.md`: detailed SEFIN latency metrics guide, including the `NFSE_SEFIN_LATENCY_METRICS` env switch, observer setup, optional P99 snapshots, and export guidance.
-- `index.ts`: public exports. Treat this as the supported API surface.
-- `examples/`: runnable usage examples.
-- `JSON_MAPPING.md`: mapping notes for the declarative JSON input.
-- `test/`: behavior examples and regression coverage.
-
-## Public Entry Points
-
-- `NfseClient`: resource-oriented client. Configure certificate, environment, and defaults once, then use `client.invoices.create/buildDpsJson/get/retrieve/getByDpsId/recover/cancel/cancelBySubstitution/danfse`, `client.events.get/listByAccessKey`, `client.distribution.byNsu` and `client.municipalParameters.*`. `request: { timeoutMs, retries }` applies to every call.
-- `emitirNfse(input, pfx, options?)`: issue an invoice from a DPS XML string or `DpsJsonRequest`.
-- `buildDpsFromJson(input)`: build unsigned DPS XML from declarative JSON.
-- `buildDpsId(prestador, nDPS, serie?)`: derive the 45-character DPS Id.
-- `NfseCertificate`: opaque A1 certificate for signing and mTLS (`fromEnv`, `fromFile`, `fromBase64`, `fromPfx`, `fromPem`). Exposes only metadata (CNPJ/CPF, validity, fingerprint); the private key lives outside the object and never appears in logs or JSON. Env convention: `NFSE_CERT_PATH` or `NFSE_CERT_BASE64`, plus `NFSE_CERT_PASSWORD` or `NFSE_CERT_PASSWORD_FILE`.
-- `loadPfx(...)` and `loadPfxFromBuffer(...)`: legacy loaders that return the key as PEM; prefer `NfseCertificate`.
-- `obterNfse(key, cert, ambiente?)`: GET /nfse/{key} decoded to `{ nfseXml, resumo }` (typed `NfseResumo`); throws `ConsultaNfseError` (`notFound` for 404). `lerNfse(xml)` reads XML you already have.
-- `recuperarNfsePorDps(dpsId, cert, ambiente?)`: after an emission timeout, GET /dps/{id} then GET /nfse/{key}; `null` means SEFIN never processed the DPS and it is safe to send the same signed DPS again.
-- `cancelarNfse(...)` (e101101) and `cancelarNfsePorSubstituicao(...)` (e105102): build, XSD-validate, sign and send the event. `autor` defaults to the certificate holder. Builders: `buildCancelamentoFromJson`, `buildCancelamentoPorSubstituicaoFromJson`; rejection: `RegistrarEventoError`.
-- `baixarDanfse(...)`: DANFSe PDF from the ADN (`GET /danfse/{key}`).
-- `distribuirDfePorNsu`, `consultarEventosPorChaveAdn`, `consultarConvenio`, `consultarAliquota`, `consultarHistoricoAliquotas`, `consultarRegimesEspeciais`, `consultarRetencoes`, `consultarBeneficio`: ADN queries.
-- `consultarNfse(...)`, `consultarDps(...)`, `consultarEvento(...)`, `enviarEvento(...)`, `extrairErros(...)`: lower-level helpers returning raw `{ status, body }`.
-- `setSefinRequestObserver(...)` and `createSefinLatencyTracker(...)`: observe SEFIN round-trip latency when `NFSE_SEFIN_LATENCY_METRICS` is enabled; percentiles require `includePercentiles: true`.
-- `gzipBase64(...)`, `gunzipBase64(...)`, `signDps(...)`, `verifyDps(...)`: protocol utilities for custom flows.
-- `DPS_JSON_REQUEST_SCHEMA`: JSON Schema 2020-12 for the canonical `DpsJsonRequest` (formats and code domains; cross-field rules stay in `validateDpsJsonRequest`).
-- `@useinvio/nfse-sdk/agent`: framework-neutral agent/MCP tools (`validate_dps`, `build_dps_xml`, `get_nfse`) and `toAgentIssues(error)`. Certificate and environment come from the host context, never from tool input.
-
-## File Map
-
-- `client.ts`: friendly client API and default merging.
-- `emissaoNota.ts`: central issue flow: prepare input, sign DPS, gzip/base64, transmit, unzip authorized XML, normalize errors.
-- `dpsJson.ts`: JSON-to-DPS XML builder, XML escaping, DPS Id generation, value formatting, and XML block assembly.
-- `fiscalValidation.ts`: structural and layout-oriented validation for the JSON input. This intentionally rejects unsupported or ambiguous fiscal shapes.
-- `sefinClient.ts`: HTTPS mTLS requests to SEFIN and ADN, timeouts, GET-only retries, path-parameter validation, latency observation, response parsing, error normalization, and every endpoint function.
-- `eventoJson.ts`: pedRegEvento builders (e101101, e105102) and motive code tables.
-- `eventosNfse.ts`: event flow: XSD-validate, sign `infPedReg`, gzip/base64, send, normalize rejections.
-- `consultas.ts`: typed query (`obterNfse`) and emission recovery (`recuperarNfsePorDps`).
-- `nfseXml.ts`: `lerNfse`, the typed reader for authorized NFS-e XML.
-- `xmlBuild.ts`: XML element/escaping helpers shared by the DPS and event builders.
-- `config.ts`: SEFIN and ADN base URLs, environment names, and `tpAmb` mapping.
-- `certificate.ts`: `NfseCertificate`, ICP-Brasil CNPJ/CPF extraction, env loading, per-certificate mTLS agent, and the internal `resolveCredentials` used by signing and transport.
-- `loadPfx.ts`: PFX/A1 certificate decoding with `node-forge` (shared parser plus legacy loaders).
-- `xsdValidation.ts`: in-process XSD validation (DPS and pedRegEvento) with libxml2 compiled to WebAssembly; each schema compiled once per process.
-- `signXml.ts`: XMLDSIG signing and verification helpers.
-- `gzipB64.ts`: GZip/Base64 helpers.
-- `fiscalDomains.ts`: code domains shared by the validator and the JSON Schema.
-- `dpsJsonSchema.ts`: JSON Schema for `DpsJsonRequest`; `satisfies` checks fail the build when a type gains a field the schema does not describe.
-- `jsonSchemaCheck.ts`: internal validator for the portable keyword subset the schema may use.
-- `agent.ts`: agent tool definitions, unified `NfseAgentIssue` shape, and error mapping.
-
-## Core Data Shape
-
-Declarative issuing uses `DpsJsonRequest`:
-
-- `ambiente`: optional, `restrita` or `producao`; defaults to `restrita`.
-- `prestador`: issuer profile such as `cnpj`, `cLocEmi`, `serie`, `opSimpNac`, and `regEspTrib`.
-- `servico`: service defaults such as `cTribNac`, `xDescServ`, `cLocPrestacao`, and optional `cNBS`.
-- `emissao`: invoice-specific data such as `nDPS`, dates, `valores`, optional parties, municipal/federal taxation blocks, and `totTrib`.
-
-Keep values as strings when they represent fiscal codes, identifiers, decimals, or exact XML values. Many fields are numeric-looking but must preserve leading zeroes.
-
-## Important Invariants
-
-- Node.js >= 20 and ESM are expected.
-- Public imports should come from the package root (`index.ts` exports), not internal files, unless you are editing the SDK itself.
-- `DEFAULT_AMBIENTE` is `restrita`; `NfseClient` also accepts `sandbox` and `production` aliases.
-- `buildDpsFromJson` validates first via `validateDpsJsonRequest`.
-- The SDK intentionally avoids silent fiscal defaults for required tax fields such as `tributacaoMunicipal` and `totTrib`.
-- The JSON validator restricts `totTrib` by regime: non-Simples requires all three percentage totals; MEI requires `indTotTrib="0"`; ME/EPP requires `pTotTribSN`. Value totals remain typed but are rejected by the current regime matrix.
-- `buildDpsId` must return a 45-character Id beginning with `DPS`.
-- `emitirNfse` checks certificate validity before signing and again before transmission. Holder matching is an explicit `assertCertificateForProvider` call, not an automatic requirement.
-- JSON environment precedence is options > request > restricted; external XML derives its environment from `tpAmb` and rejects explicit conflicts.
-- `client.invoices.get(key, { ambiente })` supports an explicit environment; otherwise defaults.ambiente > constructor. It does not remember the last emission.
-- Currency discrepancies are warnings; explicit values retain priority. Service amounts must remain positive after rounding; all foreign amounts are serialized with two decimals.
-- `validateDpsJsonRequest` returns independent normalized data, errors in `issues`, and non-blocking `warnings`.
-- `EmitirNotaError` covers SEFIN rejection and incomplete/invalid HTTP 2xx authorization responses, including missing/invalid/conflicting 50-digit access keys. Reconcile before retrying (`recuperarNfsePorDps`); the SDK never retries POSTs (emission, events). `retries` only applies to GETs, for network errors and HTTP 429/502/503/504.
-- `sefinClient.ts` uses a per-certificate `https.Agent` (from `NfseCertificate`) or PEM key/cert (legacy `PfxMaterial`) for mTLS, never the raw PFX in the Node TLS handshake. Access keys are validated as 50 digits before any request (`ChaveAcessoInvalidaError`); other path parameters raise `SefinParametroInvalidoError`.
-- The event endpoint body field is `pedidoRegistroEventoXmlGZipB64`.
-- XSD validation needs no system `xmllint`; it runs in WebAssembly. `XmllintUnavailableError` is a deprecated alias of `XsdEngineUnavailableError`.
-- SEFIN latency metrics are off by default, enabled through `NFSE_SEFIN_LATENCY_METRICS`, and emitted for the external request only; keep them separate from API route latency when integrating observability.
-
-## Change Guidance for LLMs
-
-- Preserve the public API names exported by `index.ts` unless the task explicitly asks for a breaking change.
-- Prefer adding or adjusting focused tests in `test/` when changing XML generation, validation, signing, transport parsing, or client defaults.
-- When adding support for a new NFS-e layout field, update the TypeScript interface, validation rules, JSON Schema (`dpsJsonSchema.ts`), builder output, docs/examples, and tests together.
-- Do not add fiscal assumptions to make examples pass. Required fiscal choices should stay explicit in user input.
-- Be careful with XML ordering. The generated order should follow the SEFIN schema, and tests may compare XML snippets.
-- Do not hand-wave certificate handling. Accept `CertificateInput` (`NfseCertificate | PfxMaterial`) and go through `resolveCredentials`; never log, serialize, or return key material, the PFX bytes, or the password.
-- Network calls to SEFIN should stay isolated in `sefinClient.ts` so tests can mock transport boundaries.
-
-## Useful Commands
+## Install and certificate
 
 ```bash
-npm run build
-npm run typecheck
-npm test
+npm install @useinvio/nfse-sdk   # Node.js >= 20, ESM, no native binaries
 ```
+
+```ts
+import { NfseCertificate } from '@useinvio/nfse-sdk';
+const certificado = NfseCertificate.fromEnv(); // NFSE_CERT_PATH or NFSE_CERT_BASE64, plus NFSE_CERT_PASSWORD or NFSE_CERT_PASSWORD_FILE
+```
+
+`NfseCertificate` keeps the private key out of the object; `console.log` and `JSON.stringify` show only CNPJ/CPF, validity and fingerprint. Never log, commit or ask for the `.pfx` or its password. Other loaders: `fromFile(path, pwd)`, `fromBase64(b64, pwd)`, `fromPfx(buffer, pwd)`, `fromPem({ key, cert })`. Errors: `CertificateValidationError` with `code` (`CERTIFICATE_INVALID_PASSWORD`, `CERTIFICATE_EXPIRED`, ...).
+
+## Issue
+
+```ts
+import { emitirNfse, EmitirNotaError, explicarErros, type DpsJsonRequest } from '@useinvio/nfse-sdk';
+
+const nota: DpsJsonRequest = {
+  ambiente: 'restrita', // official sandbox; 'producao' is legally valid
+  prestador: { cnpj, cLocEmi, serie, opSimpNac, regEspTrib },
+  servico: { cTribNac, xDescServ, cLocPrestacao },
+  emissao: { nDPS, valores: { vServ: '1500.00' }, tributacaoMunicipal, tributacaoFederal, totTrib },
+};
+try {
+  const { chaveAcesso, dpsId, nfseXml } = await emitirNfse(nota, certificado);
+} catch (error) {
+  if (error instanceof EmitirNotaError) console.table(explicarErros(error.erros)); // official rule per code
+  else throw error; // network/timeout: the outcome is unknown, see "Recover"
+}
+```
+
+- Keep fiscal codes and amounts as strings (leading zeros matter). Do not invent `cTribNac`, IBGE codes, regime or tax blocks; ask the user. Field reference: `JSON_MAPPING.md`.
+- Validate without sending: `validateDpsJsonRequest(nota)` returns `{ valid, issues, warnings }`; `buildDpsFromJson(nota)` returns `{ id, xml }`.
+- Persist before sending: `const p = prepararNota(nota, cert)` then `transmitirNotaPreparada(p, cert)`.
+- Each `nDPS` (with `serie`) produces one invoice; increment it after a successful emission.
+
+## Recover after a timeout (never resend blindly)
+
+```ts
+const existing = await recuperarNfsePorDps(p.dpsId, certificado, p.ambiente, { retries: 3 });
+// existing !== null: it was issued. null: SEFIN never got it; resend the SAME prepared DPS.
+```
+
+POST requests (emission, events) are never retried by the SDK. `{ timeoutMs, retries, signal }` works on every call; `retries` applies to GETs only.
+
+## Query, PDF, cancel
+
+```ts
+const { nfseXml, resumo } = await obterNfse(chaveAcesso, certificado); // ConsultaNfseError, .notFound on 404
+const { pdf } = await baixarDanfse(chaveAcesso, certificado);
+await cancelarNfse({ chaveAcesso, cMotivo: '1', xMotivo: 'Nota emitida com valor incorreto' }, certificado); // RegistrarEventoError
+await cancelarNfsePorSubstituicao({ chaveAcesso, chaveSubstituta, cMotivo: '01' }, certificado);
+```
+
+`cMotivo` for cancellation: `1` issuing error, `2` service not provided, `9` other; `xMotivo` 15 to 255 characters. `lerNfse(xml)` reads an NFS-e XML you already have. ADN: `distribuirDfePorNsu`, `consultarConvenio`, `consultarAliquota`, `consultarRetencoes`.
+
+## Client
+
+```ts
+const client = new NfseClient({ environment: 'sandbox', certificate: certificado, defaults: { prestador, servico }, request: { timeoutMs: 30_000, retries: 2 } });
+await client.invoices.create({ emissao });          // also retrieve, recover, cancel, cancelBySubstitution, danfse
+```
+
+## Rejection codes
+
+`explicarRejeicao('E0014')` returns the official message, rule and XML field from the gov.br annexes (Anexo I v1.01, Anexo II v1.01), `conhecida: false` for codes not in the catalog. `explicarErros(error.erros)` explains a whole rejection.
+
+## Tests without a certificate or network
+
+```ts
+import { createTestCertificate, installMockSefin } from '@useinvio/nfse-sdk/testing';
+const mock = installMockSefin();                    // in-process SEFIN + ADN; validates XSD and signatures
+const { certificate } = createTestCertificate({ cnpj: '12345678000195' });
+// ... emitirNfse / obterNfse / cancelarNfse work as usual ...
+mock.rejectNext('E0312'); mock.dropResponseNext(); // script rejections and dropped connections
+mock.restore();
+```
+
+## AI agents and MCP
+
+- `npx -y @useinvio/nfse-mcp`: MCP stdio server. Env: certificate vars above, `NFSE_AMBIENTE`, `NFSE_MCP_ALLOW_WRITE=1` (emit/cancel), `NFSE_MCP_MOCK=1` (mock SEFIN).
+- `@useinvio/nfse-sdk/agent`: `nfseAgentTools` (read-only: `validate_dps`, `build_dps_xml`, `get_nfse`, `recover_nfse_by_dps`, `explain_rejection`) and `createNfseAgentToolkit({ allowWrite })`, which adds `prepare_*`/`confirm_*` emission and cancellation. Certificate and environment are host context, never tool input. Only call `confirm_*` after the user approves the summary from `prepare_*`.
+- Claude Code plugin: `/plugin install nfse-nacional --marketplace useinvio/nfse-sdk`.
+
+## Docs
+
+- `docs/README.md` (pt-BR): tutorial, guides, API and error reference.
+- `docs/referencia/erros.md`: every error class and code.
+- `docs/referencia/ambientes.md`: SEFIN and ADN URLs and endpoints.

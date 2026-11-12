@@ -50,4 +50,6 @@ numa emissão, o resultado é incerto: [recupere pela DPS](../guias/recuperar-em
 `toAgentIssues(error)` converte os erros acima em issues com `code`, `path`,
 `severity`, `source` e `suggestion`. Códigos próprios das ferramentas:
 `UNSUPPORTED_FIELD`, `AMBIENTE_NOT_ALLOWED`, `CERTIFICATE_REQUIRED`,
-`XSD_INVALID` e `SEFIN_REJECTED`.
+`XSD_INVALID` e `SEFIN_REJECTED`. As ferramentas de escrita acrescentam
+`CONFIRMATION_NOT_FOUND` (id desconhecido, usado ou expirado) e
+`TRANSMISSION_UNCERTAIN` (falha de rede no envio; repita o confirm).

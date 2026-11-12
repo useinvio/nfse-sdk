@@ -25,7 +25,7 @@ function assertOutput(tool: NfseAgentTool, output: unknown) {
 const CHAVE = '1'.repeat(50);
 
 test('agent tools have unique names and portable schemas', () => {
-  assert.deepEqual(nfseAgentTools.map(({ name }) => name), ['validate_dps', 'build_dps_xml', 'get_nfse']);
+  assert.deepEqual(nfseAgentTools.map(({ name }) => name), ['validate_dps', 'build_dps_xml', 'get_nfse', 'recover_nfse_by_dps', 'explain_rejection']);
   for (const tool of nfseAgentTools) {
     assert.equal(tool.inputSchema.type, 'object');
     assert.equal(tool.outputSchema.type, 'object');
@@ -132,7 +132,14 @@ test('toAgentIssues maps known SDK errors and leaves the rest to the caller', ()
   assert.ok(ambiguous?.[0].suggestion);
 
   const rejected = toAgentIssues(new EmitirNotaError('x', 400, [{ Codigo: 'E0001', Descricao: 'Rejeicao', Complemento: 'campo' }], 'DPS1', {}));
-  assert.deepEqual(rejected, [{ code: 'E0001', path: '$', severity: 'error', source: 'sefin', message: 'Rejeicao (campo)' }]);
+  assert.deepEqual(rejected, [{
+    code: 'E0001',
+    path: '$',
+    severity: 'error',
+    source: 'sefin',
+    message: 'Rejeicao (campo)',
+    suggestion: 'Campo: NFSe/infNFSe/DPS/versao. Regra oficial: Prazo de aceitação da versão do leiaute DPS ultrapassado.',
+  }]);
 
   assert.equal(toAgentIssues(new Error('ECONNRESET')), undefined);
 });

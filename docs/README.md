@@ -20,7 +20,8 @@ tarefas específicas e a referência para consultar detalhes.
 | [Tratar rejeições e erros](guias/rejeicoes.md) | O que cada erro significa e o que fazer. |
 | [Timeouts e novas tentativas](guias/timeouts.md) | `timeoutMs`, `retries`, `signal`. |
 | [Distribuição e parâmetros municipais](guias/adn.md) | NSU, convênio, alíquotas, regimes especiais. |
-| [Agentes de IA e MCP](guias/agentes-ia.md) | Ferramentas para Claude, OpenAI, LangChain e MCP. |
+| [Testar sem certificado](guias/testes.md) | SEFIN simulada e certificado de teste para o seu CI. |
+| [Agentes de IA e MCP](guias/agentes-ia.md) | Servidor MCP, plugin do Claude Code e ferramentas para o seu agente. |
 | [Métricas de latência](METRICS.md) | Observar a SEFIN em produção. |
 
 ## Referência

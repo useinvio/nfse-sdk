@@ -1,0 +1,15 @@
+{
+  "name": "useinvio",
+  "description": "Plugins da Invio para a NFS-e Nacional (SEFIN).",
+  "owner": {
+    "name": "Invio",
+    "url": "https://sdk.useinvio.com/"
+  },
+  "plugins": [
+    {
+      "name": "nfse-nacional",
+      "source": "./plugin",
+      "description": "NFS-e Nacional (SEFIN) for Claude: validate, emit, query and cancel service invoices with a two-step approval, and write integrations with @useinvio/nfse-sdk."
+    }
+  ]
+}

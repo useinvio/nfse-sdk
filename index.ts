@@ -92,6 +92,9 @@ export type { EmitirNotaOptions, NotaInput, NotaPreparada, ResultadoEmissaoNota,
 export { ConsultaNfseError, decodificarRespostaNfse, obterNfse, recuperarNfsePorDps } from './consultas.js';
 export type { NfseConsultada } from './consultas.js';
 export { lerNfse } from './nfseXml.js';
+
+export { buscarRejeicao, explicarErros, explicarRejeicao, listarRejeicoes, REJEICOES_FONTES } from './rejeicoes.js';
+export type { ExplicacaoRejeicao, RejeicaoOficial } from './rejeicoes.js';
 export type { NfsePessoaResumo, NfseResumo } from './nfseXml.js';
 
 export {

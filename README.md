@@ -26,7 +26,9 @@ resposta oficial em formato estruturado. Sem binários nativos e sem `xmllint`.
 | Cancelar / cancelar por substituição | `cancelarNfse`, `cancelarNfsePorSubstituicao` | `invoices.cancel`, `invoices.cancelBySubstitution` |
 | Baixar o DANFSe em PDF | `baixarDanfse` | `invoices.danfse` |
 | Distribuição por NSU e parâmetros municipais (ADN) | `distribuirDfePorNsu`, `consultarAliquota`… | `distribution`, `municipalParameters` |
-| Ferramentas para agentes de IA e MCP | `@useinvio/nfse-sdk/agent` | – |
+| Explicar rejeições com o texto oficial | `explicarRejeicao`, `explicarErros` | – |
+| Testar sem certificado nem rede | `@useinvio/nfse-sdk/testing` | – |
+| Servidor MCP e ferramentas para agentes de IA | `npx -y @useinvio/nfse-mcp`, `@useinvio/nfse-sdk/agent` | – |
 
 ## Instalação
 
@@ -97,7 +99,8 @@ consultar, baixar o PDF e cancelar na produção restrita, do zero.
 | [Recuperar após timeout](./docs/guias/recuperar-emissao.md) | Sem notas duplicadas quando a conexão cai. |
 | [Cancelar](./docs/guias/cancelar.md) | e101101 e substituição (e105102). |
 | [Erros e rejeições](./docs/guias/rejeicoes.md) | O que cada erro significa e o que fazer. |
-| [Agentes de IA e MCP](./docs/guias/agentes-ia.md) | Ferramentas prontas, sem expor o certificado ao modelo. |
+| [Testar sem certificado](./docs/guias/testes.md) | SEFIN simulada para o seu CI. |
+| [Agentes de IA e MCP](./docs/guias/agentes-ia.md) | Servidor MCP, plugin do Claude Code, ferramentas para o seu agente. |
 | [Referência da API](./docs/referencia/api.md) | Todas as funções. |
 | [Mapeamento do JSON](./JSON_MAPPING.md) | Cada campo de `DpsJsonRequest`. |
 
@@ -105,13 +108,22 @@ Exemplos executáveis em [`examples/`](./examples).
 
 ## Com agentes de IA
 
-```ts
-import { nfseAgentTools } from '@useinvio/nfse-sdk/agent';
+Emita uma NFS-e conversando com o Claude. Para experimentar sem certificado, o
+modo de teste usa uma SEFIN simulada:
+
+```bash
+claude mcp add nfse --env NFSE_MCP_MOCK=1 --env NFSE_MCP_ALLOW_WRITE=1 -- npx -y @useinvio/nfse-mcp
 ```
 
-`validate_dps`, `build_dps_xml` e `get_nfse` vêm com JSON Schema e anotações MCP.
-O certificado e o ambiente ficam no host, nunca na entrada da ferramenta. Para
-assistentes de código, o pacote inclui [`llms.txt`](./llms.txt).
+Ou instale o plugin do Claude Code, que inclui o servidor e uma skill com o fluxo:
+
+```text
+/plugin install nfse-nacional --marketplace useinvio/nfse-sdk
+```
+
+Emitir e cancelar sempre passam por um resumo que você aprova antes do envio, e
+o certificado nunca chega ao modelo. Veja o [guia de agentes e MCP](./docs/guias/agentes-ia.md).
+Para assistentes de código, o pacote inclui [`llms.txt`](./llms.txt).
 
 ## O que fica com a sua aplicação
 

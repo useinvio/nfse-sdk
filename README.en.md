@@ -27,7 +27,9 @@ binaries and no `xmllint`.
 | Cancel / cancel by substitution | `cancelarNfse`, `cancelarNfsePorSubstituicao` | `invoices.cancel`, `invoices.cancelBySubstitution` |
 | Download the DANFSe PDF | `baixarDanfse` | `invoices.danfse` |
 | NSU distribution and municipal parameters (ADN) | `distribuirDfePorNsu`, `consultarAliquota`… | `distribution`, `municipalParameters` |
-| Tools for AI agents and MCP | `@useinvio/nfse-sdk/agent` | – |
+| Explain rejections with the official text | `explicarRejeicao`, `explicarErros` | – |
+| Test without a certificate or network | `@useinvio/nfse-sdk/testing` | – |
+| MCP server and tools for AI agents | `npx -y @useinvio/nfse-mcp`, `@useinvio/nfse-sdk/agent` | – |
 
 Function and field names follow the official Portuguese layout (`emitir` =
 issue, `consultar` = query, `cancelar` = cancel, `chaveAcesso` = access key).
@@ -117,13 +119,21 @@ and rejection messages are too:
 
 ## With AI agents
 
-```ts
-import { nfseAgentTools } from '@useinvio/nfse-sdk/agent';
+Issue an NFS-e by talking to Claude. Test mode runs a mock SEFIN, so you can try
+it without a certificate:
+
+```bash
+claude mcp add nfse --env NFSE_MCP_MOCK=1 --env NFSE_MCP_ALLOW_WRITE=1 -- npx -y @useinvio/nfse-mcp
 ```
 
-`validate_dps`, `build_dps_xml` and `get_nfse` ship with JSON Schemas and MCP
-annotations. The certificate and environment live in the host context, never in
-tool input, so the model can neither pick production nor see key material.
+Or install the Claude Code plugin (server plus a skill that teaches the workflow):
+
+```text
+/plugin install nfse-nacional --marketplace useinvio/nfse-sdk
+```
+
+Emission and cancellation always show a summary you approve before anything is
+sent, and the certificate never reaches the model. See [`mcp/README.md`](./mcp/README.md).
 
 ## Contributing
 

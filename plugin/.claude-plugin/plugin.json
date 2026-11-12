@@ -1,0 +1,59 @@
+{
+  "name": "nfse-nacional",
+  "displayName": "NFS-e Nacional",
+  "version": "0.1.0",
+  "description": "Validate, emit, query and cancel Brazil's NFS-e Nacional (SEFIN) invoices from Claude, and write integrations with @useinvio/nfse-sdk.",
+  "author": {
+    "name": "Invio",
+    "url": "https://sdk.useinvio.com/"
+  },
+  "homepage": "https://github.com/useinvio/nfse-sdk",
+  "repository": "https://github.com/useinvio/nfse-sdk",
+  "license": "MIT",
+  "keywords": ["nfse", "nfs-e", "nota-fiscal", "sefin", "brazil", "mcp"],
+  "userConfig": {
+    "cert_path": {
+      "type": "file",
+      "title": "Certificado A1 (.pfx)",
+      "description": "Caminho do certificado ICP-Brasil A1. Deixe vazio para usar só as ferramentas sem certificado, ou ative o modo de teste."
+    },
+    "cert_password": {
+      "type": "string",
+      "title": "Senha do certificado",
+      "description": "Guardada no cofre de credenciais do sistema, nunca em settings.json.",
+      "sensitive": true
+    },
+    "ambiente": {
+      "type": "string",
+      "title": "Ambiente da SEFIN",
+      "description": "restrita = testes sem validade jurídica; producao = notas com validade jurídica.",
+      "options": ["restrita", "producao"],
+      "default": "restrita"
+    },
+    "allow_write": {
+      "type": "boolean",
+      "title": "Permitir emitir e cancelar",
+      "description": "Habilita as ferramentas prepare/confirm. Mesmo ativado, nada é enviado sem a sua aprovação do resumo.",
+      "default": false
+    },
+    "mock": {
+      "type": "boolean",
+      "title": "Modo de teste (SEFIN simulada)",
+      "description": "Usa uma SEFIN simulada e um certificado de teste. Nenhuma chamada real é feita.",
+      "default": false
+    }
+  },
+  "mcpServers": {
+    "nfse": {
+      "command": "npx",
+      "args": ["-y", "@useinvio/nfse-mcp@0.1.0"],
+      "env": {
+        "NFSE_CERT_PATH": "${user_config.cert_path}",
+        "NFSE_CERT_PASSWORD": "${user_config.cert_password}",
+        "NFSE_AMBIENTE": "${user_config.ambiente}",
+        "NFSE_MCP_ALLOW_WRITE": "${user_config.allow_write}",
+        "NFSE_MCP_MOCK": "${user_config.mock}"
+      }
+    }
+  }
+}
