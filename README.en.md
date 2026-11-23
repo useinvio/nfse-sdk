@@ -1,7 +1,5 @@
 <div align="center">
 
-<img width="959" height="296" alt="NFS-e SDK" src="https://github.com/user-attachments/assets/d6c45737-e7ca-4ea7-a06f-d93b7c16e4f0" />
-
 # @useinvio/nfse-sdk
 
 **Issue, query and cancel Brazil's national service invoices (NFS-e Nacional) from TypeScript.<br>Without writing a single line of fiscal XML.** 🧾
