@@ -136,6 +136,11 @@ test('GETs retry transient failures, honor timeoutMs and stop at the first non-r
   assert.equal(calls[0].options.hostname, 'sefin.nfse.gov.br');
 });
 
+test('a response body larger than 32 MiB is rejected instead of buffered', async (t) => {
+  mockHttpsSequence(t, [{ status: 200, raw: Buffer.alloc(32 * 1024 * 1024 + 1) }]);
+  await assert.rejects(consultarNfse(CHAVE, certificate, 'restrita'), /exceeded 33554432 bytes/);
+});
+
 test('obterNfse decodes the XML into a typed summary; 404 is a typed error', async (t) => {
   mockHttpsSequence(t, [{ status: 200, body: { chaveAcesso: CHAVE, nfseXmlGZipB64: gzipBase64(nfseXml()) } }]);
   const nota = await obterNfse(CHAVE, certificate, 'restrita');

@@ -6,6 +6,12 @@ import type { Ambiente } from './config.js';
 
 /** Evita que uma conexao travada com o SEFIN prenda um worker indefinidamente. */
 const SEFIN_REQUEST_TIMEOUT_MS = 60_000;
+/**
+ * Largest response body the client will hold in memory. Real answers (NFS-e
+ * XML, DANFSe PDF, NSU batches) are far smaller; anything above this is
+ * treated as a broken response instead of growing memory without bound.
+ */
+const SEFIN_MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 export const SEFIN_LATENCY_METRICS_ENV = 'NFSE_SEFIN_LATENCY_METRICS';
 
 /** The access key is not 50 digits; raised before any network I/O so it never reaches the URL path. */
@@ -359,8 +365,21 @@ function sefinRequest(
 
     const req = https.request(options, (res) => {
       const chunks: Buffer[] = [];
-      res.on('data', (c) => chunks.push(c));
+      let received = 0;
+      let tooLarge = false;
+      res.on('data', (c: Buffer) => {
+        if (tooLarge) return;
+        received += c.length;
+        if (received > SEFIN_MAX_RESPONSE_BYTES) {
+          tooLarge = true;
+          chunks.length = 0;
+          req.destroy(new Error(`SEFIN response exceeded ${SEFIN_MAX_RESPONSE_BYTES} bytes`));
+          return;
+        }
+        chunks.push(c);
+      });
       res.on('end', () => {
+        if (tooLarge) return;
         const status = res.statusCode ?? 0;
         emitMetric({
           operation: metricOpts.operation,

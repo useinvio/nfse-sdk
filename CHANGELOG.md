@@ -4,6 +4,17 @@ Todas as mudancas relevantes deste pacote sao documentadas aqui. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa
 [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [3.3.1] - 2026-11-23
+
+### Security
+
+- Respostas da SEFIN e do ADN maiores que 32 MiB sao rejeitadas em vez de
+  ficarem acumulando na memoria.
+- `publish.yml`: a execucao manual (`workflow_dispatch`) so publica a partir da
+  `main`, porque ela nao passa pela checagem de tag.
+- Documentacao do MCP: nunca liberar `confirm_nfse_emission` nem
+  `confirm_nfse_cancellation` sem a pergunta do cliente MCP.
+
 ## [3.3.0] - 2026-11-23
 
 ### Added

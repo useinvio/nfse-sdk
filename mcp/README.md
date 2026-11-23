@@ -85,6 +85,13 @@ single-use and expire after 10 minutes.
   the model to show the summary and wait for your approval before `confirm_*`.
 - After a timeout, `confirm_nfse_emission` asks SEFIN about the DPS before it
   resends anything.
+- **Never auto-approve `confirm_nfse_emission` or `confirm_nfse_cancellation`**
+  (for example in the `allow` list of Claude Code permissions). Your client's
+  confirmation prompt is the only check that doesn't depend on the model.
+  Without it, a malicious instruction hidden in a document or JSON the agent
+  reads could get an invoice issued or cancelled without you seeing it.
+  Auto-approving the read tools and `prepare_*` is fine: they send nothing to
+  SEFIN.
 
 ## Configuration
 
