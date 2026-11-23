@@ -4,7 +4,6 @@ Todas as mudancas relevantes deste pacote sao documentadas aqui. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa
 [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
-<<<<<<< HEAD
 ## [3.3.1] - 2026-11-23
 
 ### Security
@@ -16,8 +15,6 @@ Todas as mudancas relevantes deste pacote sao documentadas aqui. O formato segue
 - Documentacao do MCP: nunca liberar `confirm_nfse_emission` nem
   `confirm_nfse_cancellation` sem a pergunta do cliente MCP.
 
-=======
->>>>>>> ea03936db9daf301b7d0d46b8344fb2000a6aa2f
 ## [3.3.0] - 2026-11-23
 
 ### Added
