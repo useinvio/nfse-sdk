@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NFS-e SDK</title>
+  <meta name="description" content="Emita, consulte e cancele NFS-e Nacional em TypeScript. Você manda o JSON, o SDK monta, valida, assina e envia.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+  <style>
+    :root {
+      --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1b; --muted: #5f5f5a; --border: #dcdcd6;
+      --accent: #0b6e4f; --accent-text: #ffffff; --accent-soft: #e5f4ee;
+      --code-bg: #1d1d1b; --code-text: #ecece8; --code-muted: #8f8f88; --code-str: #7fd6b0; --code-key: #f2c46d; --code-fn: #9ecbff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #141413; --surface: #1d1d1b; --text: #ecece8; --muted: #a3a39c; --border: #34342f;
+        --accent: #3fb68b; --accent-text: #0d1f17; --accent-soft: #15302a;
+        --code-bg: #0e0e0d; --code-text: #ecece8; --code-muted: #7d7d76;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #141413; --surface: #1d1d1b; --text: #ecece8; --muted: #a3a39c; --border: #34342f;
+      --accent: #3fb68b; --accent-text: #0d1f17; --accent-soft: #15302a;
+      --code-bg: #0e0e0d; --code-text: #ecece8; --code-muted: #7d7d76;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    nav { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; gap: 16px; flex-wrap: wrap; }
+    .brand { font-weight: 700; color: var(--text); font-size: 17px; }
+    .brand:hover { text-decoration: none; }
+    nav ul { display: flex; gap: 20px; list-style: none; margin: 0; padding: 0; font-size: 15px; }
+    nav ul a { color: var(--muted); }
+    nav ul a:hover { color: var(--text); text-decoration: none; }
+
+    .hero { display: grid; gap: 48px; justify-items: center; text-align: center; padding: 64px 0 56px; }
+    .hero > div { display: flex; flex-direction: column; align-items: center; }
+    .pill { display: inline-block; font-size: 13px; font-weight: 600; color: var(--accent); background: var(--accent-soft); padding: 4px 12px; border-radius: 999px; }
+    h1 { font-size: clamp(34px, 6vw, 60px); line-height: 1.08; letter-spacing: -0.02em; margin: 16px 0; }
+    .lead { font-size: 18px; color: var(--muted); margin: 0 0 28px; max-width: 36em; }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: center; }
+    .install { display: inline-flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 8px 8px 16px; font-size: 14px; max-width: 100%; }
+    .install code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .install code::before { content: "$ "; color: var(--muted); }
+    button { font: inherit; font-size: 13px; cursor: pointer; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 6px; padding: 6px 10px; }
+    .btn { display: inline-block; background: var(--accent); color: var(--accent-text); font-weight: 600; font-size: 15px; padding: 11px 20px; border-radius: 10px; }
+    .btn:hover { text-decoration: none; filter: brightness(1.08); }
+
+    pre.code { margin: 0; width: 100%; max-width: 720px; text-align: left; background: var(--code-bg); color: var(--code-text); border-radius: 14px; padding: 22px 24px; font-size: 13.5px; line-height: 1.65; overflow-x: auto; box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.35); }
+    .c { color: var(--code-muted); } .s { color: var(--code-str); } .k { color: var(--code-key); } .f { color: var(--code-fn); }
+
+    .flow { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 0 0 72px; font-size: 14px; }
+    .flow span { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; }
+    .flow i { font-style: normal; color: var(--muted); align-self: center; }
+
+    h2 { font-size: 28px; letter-spacing: -0.01em; margin: 0 0 24px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding-bottom: 72px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; }
+    .card b { display: block; font-size: 16px; margin: 8px 0 4px; }
+    .card p { margin: 0; color: var(--muted); font-size: 15px; }
+    .card .icon { font-size: 22px; }
+
+    .note { border-top: 1px solid var(--border); padding: 32px 0 48px; display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+    .note p { margin: 0; max-width: 40em; }
+
+    @media (max-width: 860px) {
+      .hero { gap: 32px; padding: 32px 0 48px; }
+      .grid { grid-template-columns: minmax(0, 1fr); }
+      nav ul { gap: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav aria-label="Principal">
+      <a class="brand" href="./">🧾 nfse-sdk</a>
+      <ul>
+        <li><a href="./playground/">Playground</a></li>
+        <li><a href="https://github.com/useinvio/nfse-sdk/blob/main/docs/README.md">Docs</a></li>
+        <li><a href="https://github.com/useinvio/nfse-sdk">GitHub</a></li>
+      </ul>
+    </nav>
+
+    <section class="hero">
+      <div>
+        <span class="pill">NFS-e Nacional · TypeScript</span>
+        <h1>Você manda o JSON.<br>O SDK emite a nota.</h1>
+        <p class="lead">Monta a DPS, valida no XSD oficial, assina com o seu certificado A1 e envia para a SEFIN. Sem XML na mão e sem nada para instalar no sistema.</p>
+        <div class="actions">
+          <div class="install">
+            <code id="cmd">npm install @useinvio/nfse-sdk</code>
+            <button type="button" id="copy">Copiar</button>
+          </div>
+          <a class="btn" href="./playground/">Testar no navegador →</a>
+        </div>
+      </div>
+<pre class="code" aria-label="Exemplo de código"><code><span class="k">import</span> { emitirNfse, NfseCertificate } <span class="k">from</span> <span class="s">'@useinvio/nfse-sdk'</span>;
+
+<span class="k">const</span> certificado = NfseCertificate.<span class="f">fromEnv</span>();
+
+<span class="k">const</span> { chaveAcesso } = <span class="k">await</span> <span class="f">emitirNfse</span>({
+  ambiente: <span class="s">'restrita'</span>,
+  prestador: { cnpj: <span class="s">'12345678000195'</span>, ... },
+  servico: { xDescServ: <span class="s">'Desenvolvimento de software'</span>, ... },
+  emissao: { valores: { vServ: <span class="s">'1500.00'</span> }, ... },
+}, certificado);
+
+console.<span class="f">log</span>(<span class="s">'Nota emitida! 🎉'</span>, chaveAcesso);</code></pre>
+    </section>
+
+    <div class="flow" aria-label="O que acontece por baixo">
+      <span>JSON</span><i>→</i><span>DPS</span><i>→</i><span>XSD oficial</span><i>→</i><span>Assinatura A1</span><i>→</i><span>mTLS</span><i>→</i><span>SEFIN</span><i>→</i><span>Resposta tipada</span>
+    </div>
+
+    <h2>O que vem na caixa</h2>
+    <section class="grid">
+      <div class="card"><span class="icon">✅</span><b>Valida antes de enviar</b><p>Erros apontam o campo exato do JSON, não uma linha perdida no XML.</p></div>
+      <div class="card"><span class="icon">🛟</span><b>Nunca duplica nota</b><p>Envios não são repetidos às cegas. Depois de um timeout, o SDK pergunta à SEFIN o que aconteceu.</p></div>
+      <div class="card"><span class="icon">💬</span><b>Rejeições explicadas</b><p>Cada código da SEFIN vem com o texto oficial e uma dica do que corrigir.</p></div>
+      <div class="card"><span class="icon">🧪</span><b>Testa sem certificado</b><p>Uma SEFIN simulada roda no seu CI, sem rede e sem nota de verdade.</p></div>
+      <div class="card"><span class="icon">🤖</span><b>Pronto para IA</b><p>Servidor MCP e plugin do Claude Code. Você aprova cada envio e o certificado nunca chega ao modelo.</p></div>
+      <div class="card"><span class="icon">🔐</span><b>Certificado protegido</b><p>A chave privada nunca aparece em logs, e cada emitente tem a sua própria conexão.</p></div>
+    </section>
+
+    <footer class="note">
+      <p>O SDK fala o protocolo, mas não decide nada por você: códigos de serviço, alíquotas e regime ficam com a sua aplicação e o seu contador.</p>
+      <span><a href="https://github.com/useinvio/nfse-sdk/blob/main/LICENSE">MIT</a> © Invio · <a href="https://www.npmjs.com/package/@useinvio/nfse-sdk">npm</a></span>
+    </footer>
+  </div>
+  <script>
+    document.getElementById('copy').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      try {
+        await navigator.clipboard.writeText(document.getElementById('cmd').textContent);
+        button.textContent = 'Copiado!';
+      } catch {
+        button.textContent = 'Ops';
+      }
+      setTimeout(() => { button.textContent = 'Copiar'; }, 1500);
+    });
+  </script>
+</body>
+</html>

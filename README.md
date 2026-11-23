@@ -11,7 +11,7 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-339933.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-[Site](https://sdk.useinvio.com/) · [Playground](https://useinvio.github.io/nfse-sdk/) · [Documentação](./docs/README.md) · [English](./README.en.md)
+[Site](https://useinvio.github.io/nfse-sdk/) · [Playground](https://useinvio.github.io/nfse-sdk/playground/) · [Documentação](./docs/README.md) · [English](./README.en.md)
 
 </div>
 

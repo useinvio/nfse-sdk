@@ -1,10 +1,11 @@
-name: Playground
+name: Site
 
 on:
   push:
     branches:
       - main
     paths:
+      - 'site/**'
       - 'playground/src/**'
       - 'scripts/build-playground.mjs'
       - 'cliExample.ts'
@@ -32,7 +33,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build playground
+    name: Build site
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -52,8 +53,9 @@ jobs:
 
       - name: Prepare site
         run: |
-          mkdir -p _site
-          cp playground/index.html _site/index.html
+          mkdir -p _site/playground
+          cp site/index.html _site/index.html
+          cp playground/index.html _site/playground/index.html
 
       - name: Configure Pages
         uses: actions/configure-pages@v6

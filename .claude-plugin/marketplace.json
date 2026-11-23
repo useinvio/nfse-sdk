@@ -3,7 +3,7 @@
   "description": "Plugins da Invio para a NFS-e Nacional (SEFIN).",
   "owner": {
     "name": "Invio",
-    "url": "https://sdk.useinvio.com/"
+    "url": "https://useinvio.github.io/nfse-sdk/"
   },
   "plugins": [
     {
