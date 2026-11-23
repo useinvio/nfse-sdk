@@ -74,6 +74,13 @@ rejeições com o catálogo oficial.
 - `confirm_*` têm `destructiveHint: true`, então clientes MCP pedem confirmação
   antes de executar.
 
+> **Nunca libere `confirm_nfse_emission` nem `confirm_nfse_cancellation` sem
+> pergunta** (por exemplo na lista `allow` das permissões do Claude Code). A
+> pergunta do cliente MCP é a única barreira que não depende do modelo. Sem ela,
+> um texto malicioso num documento ou num JSON que o agente leia pode convencê-lo
+> a emitir ou cancelar uma nota sem você ver. Liberar as ferramentas de leitura e
+> os `prepare_*` não tem esse risco, porque eles não enviam nada para a SEFIN.
+
 ## Ferramentas no seu agente
 
 ```ts
