@@ -1,7 +1,5 @@
 <div align="center">
 
-<img width="959" height="296" alt="NFS-e SDK" src="https://github.com/user-attachments/assets/d6c45737-e7ca-4ea7-a06f-d93b7c16e4f0" />
-
 # @useinvio/nfse-sdk
 
 **Emita, consulte e cancele NFS-e Nacional em TypeScript.<br>Sem escrever uma linha de XML fiscal.** 🧾
