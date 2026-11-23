@@ -1,46 +1,39 @@
+<div align="center">
+
+<img width="959" height="296" alt="NFS-e SDK" src="https://github.com/user-attachments/assets/d6c45737-e7ca-4ea7-a06f-d93b7c16e4f0" />
+
 # @useinvio/nfse-sdk
+
+**Emita, consulte e cancele NFS-e Nacional em TypeScript.<br>Sem escrever uma linha de XML fiscal.** 🧾
 
 [![npm version](https://img.shields.io/npm/v/@useinvio/nfse-sdk.svg)](https://www.npmjs.com/package/@useinvio/nfse-sdk)
 [![CI](https://github.com/useinvio/nfse-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/useinvio/nfse-sdk/actions/workflows/ci.yml)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-339933.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-[Website](https://sdk.useinvio.com/) · [Playground](https://useinvio.github.io/nfse-sdk/) · [Documentação](./docs/README.md) · [English](./README.en.md)
+[Site](https://sdk.useinvio.com/) · [Playground](https://useinvio.github.io/nfse-sdk/) · [Documentação](./docs/README.md) · [English](./README.en.md)
 
-<img width="959" height="296" alt="NFS-e SDK" src="https://github.com/user-attachments/assets/d6c45737-e7ca-4ea7-a06f-d93b7c16e4f0" />
+</div>
 
-**Emita, consulte e cancele NFS-e Nacional em TypeScript, sem escrever XML fiscal na mão.**
+## ✨ Como funciona
 
-Você descreve a nota em JSON; o SDK monta a DPS, valida contra o XSD oficial,
-assina com o certificado A1, compacta, envia por mTLS para a SEFIN e devolve a
-resposta oficial em formato estruturado. Sem binários nativos e sem `xmllint`.
+Você descreve a nota em JSON. O SDK cuida do resto:
 
-## O que ele faz
+```text
+JSON  →  DPS  →  XSD oficial  →  assinatura A1  →  GZip  →  mTLS  →  SEFIN  →  resposta tipada
+```
 
-| Operação | Função | No `NfseClient` |
-|---|---|---|
-| Emitir a partir de JSON ou XML | `emitirNfse` | `invoices.create` |
-| Validar sem enviar (JSON + XSD) | `validateDpsJsonRequest`, `buildDpsFromJson` | `invoices.buildDpsJson` |
-| Consultar com resultado tipado | `obterNfse` | `invoices.retrieve` |
-| Recuperar uma emissão após timeout | `recuperarNfsePorDps` | `invoices.recover` |
-| Cancelar / cancelar por substituição | `cancelarNfse`, `cancelarNfsePorSubstituicao` | `invoices.cancel`, `invoices.cancelBySubstitution` |
-| Baixar o DANFSe em PDF | `baixarDanfse` | `invoices.danfse` |
-| Distribuição por NSU e parâmetros municipais (ADN) | `distribuirDfePorNsu`, `consultarAliquota`… | `distribution`, `municipalParameters` |
-| Explicar rejeições com o texto oficial | `explicarRejeicao`, `explicarErros`, [uma página por código](./docs/rejeicoes/README.md) | – |
-| Usar pelo terminal | `npx nfse init`, `doctor`, `validate`, `emit`, `explain` | – |
-| Testar sem certificado nem rede | `@useinvio/nfse-sdk/testing` | – |
-| Servidor MCP e ferramentas para agentes de IA | `npx -y @useinvio/nfse-mcp`, `@useinvio/nfse-sdk/agent` | – |
+Nada de binário nativo nem `xmllint`: a validação XSD roda em WebAssembly.
 
-## Instalação
+## 📦 Instalação
 
 ```bash
 npm install @useinvio/nfse-sdk
 ```
 
-Node.js 20 ou mais recente. Nada para instalar no sistema: a validação XSD roda
-em WebAssembly.
+Precisa de Node.js 20 ou mais recente. Só isso.
 
-## Em 60 segundos
+## 🚀 Sua primeira nota
 
 ```bash
 NFSE_CERT_PATH=./certificado.pfx
@@ -50,23 +43,12 @@ NFSE_CERT_PASSWORD=sua-senha
 ```ts
 import { emitirNfse, EmitirNotaError, NfseCertificate } from '@useinvio/nfse-sdk';
 
-const certificado = NfseCertificate.fromEnv(); // a chave privada nunca aparece em logs
+const certificado = NfseCertificate.fromEnv(); // a chave privada nunca vai parar nos logs
 
 const nota = {
-  ambiente: 'restrita' as const, // produção restrita: o sandbox oficial
-  prestador: {
-    cnpj: '12345678000195',
-    cLocEmi: '4106902',
-    serie: '1601',
-    opSimpNac: '1',
-    regEspTrib: '0',
-  },
-  servico: {
-    cTribNac: '010201',
-    xDescServ: 'Desenvolvimento de software',
-    cLocPrestacao: '4106902',
-    cNBS: '115022000',
-  },
+  ambiente: 'restrita' as const, // produção restrita, o sandbox oficial
+  prestador: { cnpj: '12345678000195', cLocEmi: '4106902', serie: '1601', opSimpNac: '1', regEspTrib: '0' },
+  servico: { cTribNac: '010201', xDescServ: 'Desenvolvimento de software', cLocPrestacao: '4106902', cNBS: '115022000' },
   emissao: {
     nDPS: '1',
     dhEmi: '2026-06-15T10:30:00-03:00',
@@ -79,72 +61,75 @@ const nota = {
 };
 
 try {
-  const { chaveAcesso, nfseXml } = await emitirNfse(nota, certificado);
-  console.log(chaveAcesso); // chave de 50 dígitos
+  const { chaveAcesso } = await emitirNfse(nota, certificado);
+  console.log('Nota emitida! 🎉', chaveAcesso);
 } catch (error) {
   if (!(error instanceof EmitirNotaError)) throw error;
   for (const rejeicao of error.erros) console.error(rejeicao.Codigo, rejeicao.Descricao);
 }
 ```
 
-Primeira vez? Siga o [tutorial](./docs/tutoriais/primeira-nfse.md): emitir,
-consultar, baixar o PDF e cancelar na produção restrita, do zero. Ou experimente
-sem certificado, pelo terminal:
+Ainda não tem certificado? Brinque com a SEFIN simulada direto no terminal:
 
 ```bash
 npx nfse init && npx nfse emit nota.json --mock
 ```
 
-## Documentação
+Quer o passo a passo completo? O [tutorial](./docs/tutoriais/primeira-nfse.md) leva você da primeira emissão até o cancelamento.
 
-| Guia | |
-|---|---|
-| [Certificado A1](./docs/guias/certificado.md) | Variáveis de ambiente, cofres de segredo, vários emitentes. |
-| [Emitir](./docs/guias/emitir.md) | JSON, `NfseClient`, XML pronto, série e número. |
-| [Consultar e DANFSe](./docs/guias/consultar.md) | Resultado tipado e PDF. |
-| [Recuperar após timeout](./docs/guias/recuperar-emissao.md) | Sem notas duplicadas quando a conexão cai. |
-| [Cancelar](./docs/guias/cancelar.md) | e101101 e substituição (e105102). |
-| [Erros e rejeições](./docs/guias/rejeicoes.md) | O que cada erro significa e o que fazer. |
-| [Linha de comando](./docs/guias/cli.md) | `nfse doctor`, `emit`, `cancel`, `explain`. |
-| [Testar sem certificado](./docs/guias/testes.md) | SEFIN simulada para o seu CI. |
-| [Agentes de IA e MCP](./docs/guias/agentes-ia.md) | Servidor MCP, plugin do Claude Code, ferramentas para o seu agente. |
-| [Referência da API](./docs/referencia/api.md) | Todas as funções. |
-| [Mapeamento do JSON](./JSON_MAPPING.md) | Cada campo de `DpsJsonRequest`. |
+## 🧰 O que vem na caixa
 
-Exemplos executáveis em [`examples/`](./examples).
+| | Função | No `NfseClient` |
+|---|---|---|
+| 🧾 Emitir (JSON ou XML) | `emitirNfse` | `invoices.create` |
+| ✅ Validar sem enviar | `validateDpsJsonRequest`, `buildDpsFromJson` | `invoices.buildDpsJson` |
+| 🔎 Consultar | `obterNfse` | `invoices.retrieve` |
+| 🛟 Recuperar após timeout | `recuperarNfsePorDps` | `invoices.recover` |
+| ❌ Cancelar ou substituir | `cancelarNfse`, `cancelarNfsePorSubstituicao` | `invoices.cancel`, `invoices.cancelBySubstitution` |
+| 📄 Baixar o DANFSe | `baixarDanfse` | `invoices.danfse` |
+| 📬 Distribuição e parâmetros municipais | `distribuirDfePorNsu`, `consultarAliquota`… | `distribution`, `municipalParameters` |
+| 💬 Entender rejeições | `explicarRejeicao`, [uma página por código](./docs/rejeicoes/README.md) | |
+| 🧪 Testar sem rede | `@useinvio/nfse-sdk/testing` | |
+| ⌨️ Terminal | `npx nfse doctor`, `validate`, `emit`, `explain` | |
 
-## Com agentes de IA
-
-Emita uma NFS-e conversando com o Claude. Para experimentar sem certificado, o
-modo de teste usa uma SEFIN simulada:
+## 🤖 Conversando com o Claude
 
 ```bash
 claude mcp add nfse --env NFSE_MCP_MOCK=1 --env NFSE_MCP_ALLOW_WRITE=1 -- npx -y @useinvio/nfse-mcp
 ```
 
-Ou instale o plugin do Claude Code, que inclui o servidor e uma skill com o fluxo:
+Ou instale o plugin, que já traz o servidor e uma skill com o fluxo:
 
 ```text
 /plugin install nfse-nacional --marketplace useinvio/nfse-sdk
 ```
 
-Emitir e cancelar sempre passam por um resumo que você aprova antes do envio, e
-o certificado nunca chega ao modelo. Veja o [guia de agentes e MCP](./docs/guias/agentes-ia.md).
-Para assistentes de código, o pacote inclui [`llms.txt`](./llms.txt).
+Você aprova um resumo antes de qualquer envio, e o certificado nunca chega ao modelo. Mais no [guia de agentes e MCP](./docs/guias/agentes-ia.md) e no [`llms.txt`](./llms.txt).
 
-## O que fica com a sua aplicação
+## 📚 Guias
 
-O SDK cuida do protocolo; ele não é um motor fiscal. Códigos de serviço, CST,
-alíquotas, retenções, regime tributário e a numeração da DPS são decisões da
-sua aplicação e de quem cuida da parte tributária. Campos fiscais obrigatórios
-nunca recebem valores padrão silenciosos. O grupo IBS/CBS da reforma tributária
-ainda não é suportado.
+[Certificado A1](./docs/guias/certificado.md) ·
+[Emitir](./docs/guias/emitir.md) ·
+[Consultar e DANFSe](./docs/guias/consultar.md) ·
+[Recuperar após timeout](./docs/guias/recuperar-emissao.md) ·
+[Cancelar](./docs/guias/cancelar.md) ·
+[Rejeições](./docs/guias/rejeicoes.md) ·
+[CLI](./docs/guias/cli.md) ·
+[Testes](./docs/guias/testes.md) ·
+[API](./docs/referencia/api.md) ·
+[Mapeamento do JSON](./JSON_MAPPING.md) ·
+[Exemplos](./examples)
 
-## Contribuir
+## ⚖️ O que fica com você
 
-Issues e PRs são bem-vindos. Veja [CONTRIBUTING.md](./CONTRIBUTING.md) e o
-[CHANGELOG](./CHANGELOG.md).
+O SDK fala o protocolo, mas não é um motor fiscal. Código de serviço, CST, alíquotas, retenções, regime e numeração da DPS são decisões suas (e do seu contador). Campo fiscal obrigatório nunca ganha valor padrão escondido. O grupo IBS/CBS da reforma tributária ainda não é suportado.
 
-## Licença
+## 🤝 Contribuir
 
-[MIT](./LICENSE) © Invio
+Issues e PRs são muito bem vindos! Dá uma olhada no [CONTRIBUTING.md](./CONTRIBUTING.md) e no [CHANGELOG](./CHANGELOG.md).
+
+<div align="center">
+
+[MIT](./LICENSE) © Invio · feito com ☕
+
+</div>
