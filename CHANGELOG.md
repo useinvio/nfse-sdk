@@ -4,7 +4,21 @@ Todas as mudancas relevantes deste pacote sao documentadas aqui. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa
 [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
-## [3.2.0] - nao publicado
+## [3.3.0] - 2026-11-23
+
+### Added
+
+- `NFSE_CERT_PATH` e `NFSE_CERT_PASSWORD_FILE` aceitam `~` no inicio do caminho,
+  inclusive com `node --env-file`. A documentacao agora sugere guardar o
+  certificado e a senha em `~/.config/nfse/`, fora do projeto.
+- Pagina inicial simples em `site/`, publicada no GitHub Pages. O playground
+  passa a ficar em `/playground/`.
+
+### Changed
+
+- README em portugues e ingles mais curto e direto.
+
+## [3.2.0]
 
 ### Added
 

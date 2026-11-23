@@ -33,7 +33,7 @@ tarefas específicas e a referência para consultar detalhes.
 - [Mapeamento do JSON da DPS](../JSON_MAPPING.md): cada campo de `DpsJsonRequest`.
 - [Matriz fiscal](FISCAL_MATRIX.md): combinações aceitas por regime.
 - [Códigos de rejeição](rejeicoes/README.md): uma página por código oficial da SEFIN.
-- [Playground](https://useinvio.github.io/nfse-sdk/): JSON → DPS no navegador, sem instalar nada.
+- [Playground](https://useinvio.github.io/nfse-sdk/playground/): JSON → DPS no navegador, sem instalar nada.
 
 ## Conceitos
 

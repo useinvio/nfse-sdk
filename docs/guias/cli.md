@@ -18,8 +18,8 @@ antes de emitir de verdade.
 ## Com o seu certificado
 
 ```bash
-export NFSE_CERT_PATH=./certificado.pfx
-export NFSE_CERT_PASSWORD_FILE=./senha.txt   # ou deixe que o nfse pergunte a senha
+export NFSE_CERT_PATH=~/.config/nfse/certificado.pfx
+export NFSE_CERT_PASSWORD_FILE=~/.config/nfse/senha   # ou omita e o nfse pergunta a senha
 
 npx nfse doctor                  # Node.js, motor XSD, certificado e vencimento
 npx nfse emit nota.json          # mostra o resumo e pede confirmação

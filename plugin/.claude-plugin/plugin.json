@@ -5,7 +5,7 @@
   "description": "Validate, emit, query and cancel Brazil's NFS-e Nacional (SEFIN) invoices from Claude, and write integrations with @useinvio/nfse-sdk.",
   "author": {
     "name": "Invio",
-    "url": "https://sdk.useinvio.com/"
+    "url": "https://useinvio.github.io/nfse-sdk/"
   },
   "homepage": "https://github.com/useinvio/nfse-sdk",
   "repository": "https://github.com/useinvio/nfse-sdk",

@@ -8,7 +8,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
-import { NfseCertificate, type CertificateInput } from './certificate.js';
+import { expandHomePath, NfseCertificate, type CertificateInput } from './certificate.js';
 import { CertificateValidationError } from './certificateValidation.js';
 import { ConsultaNfseError, obterNfse, recuperarNfsePorDps } from './consultas.js';
 import { buildDpsFromJson, type DpsJsonRequest } from './dpsJson.js';
@@ -132,10 +132,10 @@ async function loadCertificate(options: Options, required: boolean): Promise<Cer
   }
   let password: string | undefined;
   if (options['password-file']) password = readFileSync(options['password-file'], 'utf8').replace(/\r?\n$/, '');
-  else if (process.env.NFSE_CERT_PASSWORD_FILE) password = readFileSync(process.env.NFSE_CERT_PASSWORD_FILE, 'utf8').replace(/\r?\n$/, '');
+  else if (process.env.NFSE_CERT_PASSWORD_FILE) password = readFileSync(expandHomePath(process.env.NFSE_CERT_PASSWORD_FILE.trim()), 'utf8').replace(/\r?\n$/, '');
   else if (process.env.NFSE_CERT_PASSWORD !== undefined) password = process.env.NFSE_CERT_PASSWORD;
   else password = await ask('Senha do certificado: ', true);
-  if (path) return NfseCertificate.fromFile(path, password);
+  if (path) return NfseCertificate.fromFile(expandHomePath(path), password);
   return NfseCertificate.fromBase64(process.env.NFSE_CERT_BASE64!, password);
 }
 

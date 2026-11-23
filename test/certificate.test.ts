@@ -139,6 +139,23 @@ test('fromEnv supports path, base64 and password files', () => {
   }
 });
 
+test('fromEnv expands ~ in the certificate and password paths', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'nfse-sdk-home-'));
+  const previousHome = process.env.HOME;
+  const previousProfile = process.env.USERPROFILE;
+  try {
+    process.env.HOME = dir;
+    process.env.USERPROFILE = dir;
+    writeFileSync(join(dir, 'a1.pfx'), pfx);
+    writeFileSync(join(dir, 'senha'), PASSWORD);
+    assert.equal(NfseCertificate.fromEnv({ NFSE_CERT_PATH: '~/a1.pfx', NFSE_CERT_PASSWORD_FILE: '~/senha' }).cnpj, '12345678000195');
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
+    if (previousProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = previousProfile;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('NfseCertificate signs a verifiable DPS', () => {
   const certificate = NfseCertificate.fromPfx(pfx, PASSWORD);
   const { id, xml } = buildDpsFromJson(invoice());

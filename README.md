@@ -9,7 +9,7 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-339933.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-[Site](https://sdk.useinvio.com/) · [Playground](https://useinvio.github.io/nfse-sdk/) · [Documentação](./docs/README.md) · [English](./README.en.md)
+[Site](https://useinvio.github.io/nfse-sdk/) · [Playground](https://useinvio.github.io/nfse-sdk/playground/) · [Documentação](./docs/README.md) · [English](./README.en.md)
 
 </div>
 
@@ -33,9 +33,20 @@ Precisa de Node.js 20 ou mais recente. Só isso.
 
 ## 🚀 Sua primeira nota
 
+Guarde o certificado fora do projeto, longe de pastas sincronizadas. A senha é digitada sem aparecer na tela e não vai para o histórico do terminal:
+
 ```bash
-NFSE_CERT_PATH=./certificado.pfx
-NFSE_CERT_PASSWORD=sua-senha
+mkdir -p ~/.config/nfse && chmod 700 ~/.config/nfse
+cp certificado.pfx ~/.config/nfse/
+printf 'Senha: ' && read -rs s && printf '%s' "$s" > ~/.config/nfse/senha && unset s && echo
+chmod 600 ~/.config/nfse/*
+```
+
+E aponte o `.env` para lá:
+
+```bash
+NFSE_CERT_PATH=~/.config/nfse/certificado.pfx
+NFSE_CERT_PASSWORD_FILE=~/.config/nfse/senha
 ```
 
 ```ts
