@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { resolve } from 'node:path';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -33,10 +35,13 @@ test('environment config refuses mock in production and starts without a certifi
 });
 
 test('official MCP client drives the stdio server through a full mock emission', { timeout: 60_000 }, async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'nfse-mcp-profile-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const profilePath = join(dir, 'perfil.json');
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [resolve('dist/mcpCli.js')],
-    env: { NFSE_MCP_MOCK: '1', NFSE_MCP_ALLOW_WRITE: '1', PATH: process.env.PATH ?? '' },
+    env: { NFSE_MCP_MOCK: '1', NFSE_MCP_ALLOW_WRITE: '1', NFSE_PROFILE_PATH: profilePath, PATH: process.env.PATH ?? '' },
     stderr: 'pipe',
   });
   const client = new Client({ name: 'nfse-sdk-test', version: '1.0.0' });
@@ -46,7 +51,8 @@ test('official MCP client drives the stdio server through a full mock emission',
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((tool) => tool.name).sort(), [
     'build_dps_xml', 'confirm_nfse_cancellation', 'confirm_nfse_emission', 'explain_rejection', 'get_nfse',
-    'prepare_nfse_cancellation', 'prepare_nfse_emission', 'recover_nfse_by_dps', 'validate_dps',
+    'get_nfse_profile', 'prepare_nfse_cancellation', 'prepare_nfse_emission', 'prepare_nfse_emission_from_profile',
+    'recover_nfse_by_dps', 'update_nfse_profile', 'validate_dps',
   ]);
   assert.equal(tools.find((tool) => tool.name === 'confirm_nfse_emission')?.annotations?.destructiveHint, true);
 
@@ -74,6 +80,23 @@ test('official MCP client drives the stdio server through a full mock emission',
 
   const invalid = await client.callTool({ name: 'get_nfse', arguments: { chaveAcesso: '123' } });
   assert.equal(invalid.isError, true);
+
+  const { emissao, prestador, servico } = request('1');
+  const saved = await client.callTool({
+    name: 'update_nfse_profile',
+    arguments: {
+      prestador,
+      servicos: { dev: { ...servico, tributacaoMunicipal: emissao.tributacaoMunicipal, tributacaoFederal: emissao.tributacaoFederal, totTrib: emissao.totTrib } },
+      clientes: { acme: emissao.tomador },
+      ultimoNDPSRestrita: 500,
+    },
+  });
+  assert.equal((saved.structuredContent as any).pronto, true, JSON.stringify(saved.structuredContent));
+  const fromProfile = await client.callTool({ name: 'prepare_nfse_emission_from_profile', arguments: { cliente: 'acme', valor: '750' } });
+  assert.equal((fromProfile.structuredContent as any).resumo.nDPS, '501', JSON.stringify(fromProfile.structuredContent));
+  const emitted = await client.callTool({ name: 'confirm_nfse_emission', arguments: { confirmationId: (fromProfile.structuredContent as any).confirmationId } });
+  assert.match((emitted.structuredContent as any).chaveAcesso, /^\d{50}$/);
+  assert.equal(JSON.parse(readFileSync(profilePath, 'utf8')).ultimoNDPSRestrita, 501);
 });
 
 test('MCP package, registry metadata and plugin agree on name and version', async () => {

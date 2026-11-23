@@ -113,6 +113,8 @@ Ou instale o plugin, que já traz o servidor e uma skill com o fluxo:
 /plugin install nfse-nacional --marketplace useinvio/nfse-sdk
 ```
 
+Salve seu CNPJ, serviços e clientes uma vez no [perfil do emissor](./docs/guias/agentes-ia.md#perfil-do-emissor) e depois é só dizer "emite 1500 pra Padaria do Zé".
+
 Você aprova um resumo antes de qualquer envio, e o certificado nunca chega ao modelo. Mais no [guia de agentes e MCP](./docs/guias/agentes-ia.md) e no [`llms.txt`](./llms.txt).
 
 ## 📚 Guias

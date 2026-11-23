@@ -30,6 +30,7 @@ claude mcp add nfse --env NFSE_CERT_PATH=/caminho/certificado.pfx --env NFSE_CER
 | `NFSE_AMBIENTE` | `restrita` | `producao` emite notas com validade jurídica. |
 | `NFSE_MCP_ALLOW_WRITE` | desligado | `1` habilita emitir e cancelar (prepare/confirm). |
 | `NFSE_MCP_MOCK` | desligado | `1` usa a SEFIN simulada e um certificado de teste. Recusado com `producao`. |
+| `NFSE_PROFILE_PATH` | `~/.config/nfse/perfil.json` | Perfil do emissor. No modo de teste o padrão é `perfil-teste.json`, para não mexer na numeração real. |
 
 Configuração para Claude Desktop, Cursor e VS Code no
 [README do pacote](../../mcp/README.md).
@@ -59,6 +60,56 @@ rejeições com o catálogo oficial.
 | `confirm_nfse_emission` | Envia a DPS preparada. | Sim, escrita |
 | `prepare_nfse_cancellation` | Monta o cancelamento e mostra a nota; não envia. | Sim, escrita |
 | `confirm_nfse_cancellation` | Envia o cancelamento preparado. | Sim, escrita |
+| `get_nfse_profile` | Mostra prestador, serviços e clientes salvos e o que falta no perfil. | Não |
+| `update_nfse_profile` | Salva dados no perfil local. Não fala com a SEFIN. | Não |
+| `prepare_nfse_emission_from_profile` | Prepara a nota só com cliente, serviço e valor; não envia. | Sim, escrita |
+
+## Perfil do emissor
+
+Com o perfil, emitir vira uma frase: "emite 1500 pra Padaria do Zé". Você salva
+uma vez os dados do prestador, os serviços que costuma prestar (com a
+tributação que você ou o seu contador definiram) e os clientes. Depois o Claude
+só precisa do cliente, do serviço e do valor.
+
+O jeito mais fácil de montar o perfil é pedir ao próprio Claude: ele usa
+`get_nfse_profile` para ver o que falta e `update_nfse_profile` para salvar,
+perguntando um dado de cada vez. Ele não escolhe códigos fiscais por você:
+`cTribNac`, `cNBS`, regime e tributação vêm de você ou do contador.
+
+O arquivo fica em `~/.config/nfse/perfil.json`, legível só pelo seu usuário:
+
+```json
+{
+  "prestador": { "cnpj": "12345678000195", "cLocEmi": "4106902", "serie": "1601", "opSimpNac": "1", "regEspTrib": "0" },
+  "servicos": {
+    "site": {
+      "cTribNac": "010201", "xDescServ": "Desenvolvimento de site", "cLocPrestacao": "4106902", "cNBS": "115022000",
+      "tributacaoMunicipal": { "tribISSQN": "1", "tpRetISSQN": "1" },
+      "tributacaoFederal": { "piscofins": { "CST": "07" } },
+      "totTrib": { "pTotTribFed": "0.00", "pTotTribEst": "0.00", "pTotTribMun": "5.00" }
+    }
+  },
+  "clientes": {
+    "padaria do ze": { "CPF": "12345678901", "xNome": "Padaria do Zé", "end": { "endNac": { "cMun": "4106902", "CEP": "80010000" }, "xLgr": "Rua A", "nro": "1", "xBairro": "Centro" } }
+  },
+  "ultimoNDPS": 41,
+  "ultimoNDPSRestrita": 0
+}
+```
+
+Os valores acima são ilustrativos. `ultimoNDPS` é o número da última DPS que
+você emitiu em produção nessa série (0 se nunca emitiu), e `ultimoNDPSRestrita`
+é o mesmo para a produção restrita, que a SEFIN numera separado. A cada nota
+aceita, o contador do ambiente avança sozinho. Duas notas preparadas ao mesmo
+tempo recebem números diferentes.
+
+Nomes de clientes e serviços não diferenciam maiúsculas nem acentos, e o valor
+aceita `1500`, `1500,50` ou `R$ 99,90`. A emissão continua em duas etapas:
+`prepare_nfse_emission_from_profile` mostra o resumo e só `confirm_nfse_emission`
+envia.
+
+Em código, `buildDpsRequestFromProfile(perfil, { cliente, servico, valor }, ambiente)`
+monta a mesma requisição para usar com `emitirNfse`.
 
 ## Segurança
 

@@ -4,6 +4,28 @@ Todas as mudancas relevantes deste pacote sao documentadas aqui. O formato segue
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa
 [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [3.4.0] - nao publicado
+
+### Added
+
+- Perfil do emissor (`~/.config/nfse/perfil.json`): prestador, servicos com a
+  tributacao escolhida pelo usuario e clientes por nome. Com ele, emitir pede
+  so cliente, servico e valor. A numeracao da DPS avanca sozinha a cada nota
+  aceita, com um contador para producao (`ultimoNDPS`) e outro para a producao
+  restrita (`ultimoNDPSRestrita`). Nenhum codigo fiscal e preenchido pelo SDK.
+- Ferramentas MCP e de agente `get_nfse_profile`, `update_nfse_profile` e
+  `prepare_nfse_emission_from_profile`, ativadas com `profilePath` em
+  `createNfseAgentToolkit`. O servidor MCP usa `NFSE_PROFILE_PATH` e, no modo
+  de teste, um `perfil-teste.json` separado.
+- API: `readNfseProfile`, `writeNfseProfile`, `mergeNfseProfile`,
+  `buildDpsRequestFromProfile`, `summarizeNfseProfile`, `ultimoNDPSField`,
+  `resolveNfseProfilePath`, `DEFAULT_NFSE_PROFILE_PATH` e `NfseProfileError`.
+
+### Fixed
+
+- `checkJsonSchema` agora valida os valores de `additionalProperties` quando ele
+  e um schema, e nao so quando e `false`.
+
 ## [3.3.1] - 2026-11-23
 
 ### Security

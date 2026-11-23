@@ -72,6 +72,9 @@ system keychain):
 | `confirm_nfse_emission` | Sends the prepared DPS. Retrying after a dropped connection never duplicates. | Yes, write |
 | `prepare_nfse_cancellation` | Builds the cancellation and shows the invoice; does not send. | Yes, write |
 | `confirm_nfse_cancellation` | Sends the prepared cancellation. | Yes, write |
+| `get_nfse_profile` | Shows the saved provider, services and clients, and what is missing. | No |
+| `update_nfse_profile` | Saves provider, services and clients to the local profile. Never talks to SEFIN. | No |
+| `prepare_nfse_emission_from_profile` | Prepares an invoice from the profile with just client, service and amount; does not send. | Yes, write |
 
 Write tools only exist with `NFSE_MCP_ALLOW_WRITE=1`. Confirmation ids are
 single-use and expire after 10 minutes.
@@ -102,6 +105,7 @@ single-use and expire after 10 minutes.
 | `NFSE_AMBIENTE` | `restrita` | `restrita` or `producao`. |
 | `NFSE_MCP_ALLOW_WRITE` | off | `1` enables the prepare/confirm tools. |
 | `NFSE_MCP_MOCK` | off | `1` uses the in-process mock SEFIN and a test certificate. Refused with `producao`. |
+| `NFSE_PROFILE_PATH` | `~/.config/nfse/perfil.json` | Issuer profile. In mock mode the default is `perfil-teste.json`, so tests never move the real DPS counters. |
 
 The server logs its configuration (never secrets) to stderr at startup.
 

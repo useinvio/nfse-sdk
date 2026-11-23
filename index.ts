@@ -156,3 +156,16 @@ export type { CertificateValidationCode } from './certificateValidation.js';
 
 export { NfseCertificate, NFSE_CERT_ENV } from './certificate.js';
 export type { CertificateInput, NfseCertificateFromPemInput, NfseCertificateInfo } from './certificate.js';
+
+export {
+  buildDpsRequestFromProfile,
+  DEFAULT_NFSE_PROFILE_PATH,
+  mergeNfseProfile,
+  NfseProfileError,
+  readNfseProfile,
+  resolveNfseProfilePath,
+  summarizeNfseProfile,
+  ultimoNDPSField,
+  writeNfseProfile,
+} from './profile.js';
+export type { NfseProfile, NfseProfileInvoiceInput, NfseProfileServico, NfseProfileUpdate } from './profile.js';
