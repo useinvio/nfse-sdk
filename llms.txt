@@ -91,6 +91,7 @@ mock.restore();
 
 - `npx -y @useinvio/nfse-mcp`: MCP stdio server. Env: certificate vars above, `NFSE_AMBIENTE`, `NFSE_MCP_ALLOW_WRITE=1` (emit/cancel), `NFSE_MCP_MOCK=1` (mock SEFIN).
 - `@useinvio/nfse-sdk/agent`: `nfseAgentTools` (read-only: `validate_dps`, `build_dps_xml`, `get_nfse`, `recover_nfse_by_dps`, `explain_rejection`) and `createNfseAgentToolkit({ allowWrite })`, which adds `prepare_*`/`confirm_*` emission and cancellation. Certificate and environment are host context, never tool input. Only call `confirm_*` after the user approves the summary from `prepare_*`.
+- Issuer profile (`~/.config/nfse/perfil.json`, or `NFSE_PROFILE_PATH`): provider data, services with the user's tax treatment, and clients by short name. Tools `get_nfse_profile`, `update_nfse_profile` and `prepare_nfse_emission_from_profile` (just `cliente`, `servico`, `valor`). Never fill tax codes yourself: ask the user. In code: `buildDpsRequestFromProfile(profile, { cliente, servico, valor }, ambiente)`. DPS counters `ultimoNDPS` (production) and `ultimoNDPSRestrita` advance after each accepted emission.
 - Claude Code plugin: `/plugin install nfse-nacional --marketplace useinvio/nfse-sdk`.
 
 ## Docs

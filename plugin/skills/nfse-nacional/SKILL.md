@@ -39,6 +39,21 @@ mTLS to SEFIN, events, DANFSe. It is **not** a tax engine.
    (cMotivo 1 erro na emissão, 2 serviço não prestado, 9 outros; xMotivo 15–255
    characters) and `confirm_nfse_cancellation`.
 
+### With a profile (the short way)
+
+Call `get_nfse_profile` first. When `pronto: true`, emitting needs only a client,
+a service and an amount: `prepare_nfse_emission_from_profile` with
+`{ cliente, servico, valor }` (add `competencia` if the service was in another
+month), show the summary, then `confirm_nfse_emission`. The DPS number comes
+from the profile and advances on its own.
+
+When `faltando` lists something, offer to fill it in with `update_nfse_profile`,
+one question at a time. The provider's CNPJ/CPF can come from
+`certificado.documento`. Tax codes and treatment (`cTribNac`, `cNBS`, regime,
+`tributacaoMunicipal`, `tributacaoFederal`, `totTrib`) must come from the user
+or their accountant: never pick them. For the DPS counter, ask for the number
+of the last DPS they issued in that series (0 if none).
+
 If write tools are missing, emission is disabled in the plugin settings; tell
 the user how to enable it instead of working around it. If `CERTIFICATE_REQUIRED`
 appears, the user can set the certificate or enable test mode (mock SEFIN).

@@ -117,6 +117,8 @@ Or install the plugin, which bundles the server and a skill that knows the workf
 /plugin install nfse-nacional --marketplace useinvio/nfse-sdk
 ```
 
+Save your CNPJ, services and clients once in the [issuer profile](./docs/guias/agentes-ia.md#perfil-do-emissor) (in Portuguese), and after that just say "issue 1500 to Padaria do Zé".
+
 You approve a summary before anything is sent, and the certificate never reaches the model. More in [`mcp/README.md`](./mcp/README.md). Coding assistants get an English API guide in [`llms.txt`](./llms.txt).
 
 ## 📚 Docs

@@ -28,6 +28,19 @@ import { DpsXsdValidationError, validateDpsXmlAgainstXsd } from './xsdValidation
 import type { Ambiente } from './config.js';
 import type { DpsJsonRequest } from './dpsJson.js';
 import type { CertificateInput } from './certificate.js';
+import {
+  buildDpsRequestFromProfile,
+  mergeNfseProfile,
+  NfseProfileError,
+  readNfseProfile,
+  resolveNfseProfilePath,
+  summarizeNfseProfile,
+  ultimoNDPSField,
+  writeNfseProfile,
+  type NfseProfile,
+  type NfseProfileInvoiceInput,
+  type NfseProfileUpdate,
+} from './profile.js';
 
 export { DPS_JSON_REQUEST_SCHEMA } from './dpsJsonSchema.js';
 export type { JsonSchema } from './dpsJsonSchema.js';
@@ -461,6 +474,12 @@ export interface NfseAgentToolkitOptions {
   allowWrite?: boolean;
   /** How long a prepared emission/cancellation can be confirmed. Default: 10 minutes. */
   confirmationTtlMs?: number;
+  /**
+   * Host-owned path of the local issuer profile (see `profile.ts`). When set,
+   * `get_nfse_profile` and `update_nfse_profile` are added, and with
+   * `allowWrite` also `prepare_nfse_emission_from_profile`. Never tool input.
+   */
+  profilePath?: string;
 }
 
 export interface NfseAgentToolkit {
@@ -474,6 +493,8 @@ interface PendingEmission {
   nota: NotaPreparada;
   attempted: boolean;
   expiresAt: number;
+  /** Numeric nDPS to record as `ultimoNDPS` in the profile once SEFIN accepts it. */
+  profileNDPS?: number;
 }
 
 interface PendingCancellation {
@@ -516,6 +537,49 @@ export function createNfseAgentToolkit(options: NfseAgentToolkitOptions = {}): N
     `Mostre este resumo ao usuario e so chame o confirm com o confirmationId depois de uma aprovacao explicita. ` +
     `Ambiente: ${ambiente === 'producao' ? 'PRODUCAO (nota com validade juridica)' : 'producao restrita (teste, sem validade juridica)'}.`;
 
+  async function prepare(
+    input: DpsRequestToolInput,
+    context: NfseAgentContext | undefined,
+    extra: { profileNDPS?: number; resumo?: Record<string, unknown> } = {},
+  ): Promise<Record<string, unknown>> {
+    sweep();
+    const { ambiente, issues, warnings, request } = validateForAgent(input, context);
+    if (issues.length) return { ok: false, ambiente, issues, warnings };
+    if (!context?.pfx) return { ok: false, ambiente, issues: [certificateRequired()], warnings };
+    try {
+      const nota = prepararNota(request, context.pfx);
+      const confirmationId = randomUUID();
+      const expiresAt = Date.now() + ttl;
+      pending.set(confirmationId, { kind: 'emission', nota, attempted: false, expiresAt, profileNDPS: extra.profileNDPS });
+      return {
+        ok: true,
+        confirmationId,
+        expiresAt: new Date(expiresAt).toISOString(),
+        resumo: { ...extra.resumo, ...emissionSummary(request, nota) },
+        warnings,
+        instrucoes: confirmationText(ambiente),
+      };
+    } catch (error) {
+      const mapped = toAgentIssues(error);
+      if (!mapped) throw error;
+      return { ok: false, ambiente, issues: mapped, warnings };
+    }
+  }
+
+  /** Records the DPS number SEFIN accepted, so the next profile emission uses the following one. */
+  function recordProfileNDPS(entry: PendingEmission): Record<string, unknown> {
+    if (options.profilePath === undefined || entry.profileNDPS === undefined) return {};
+    const field = ultimoNDPSField(entry.nota.ambiente);
+    try {
+      const profile = readNfseProfile(options.profilePath);
+      const ultimo = Math.max(profile[field] ?? -1, entry.profileNDPS);
+      if (ultimo !== profile[field]) writeNfseProfile({ ...profile, [field]: ultimo }, options.profilePath);
+      return { perfil: { [field]: ultimo } };
+    } catch (error) {
+      return { avisoPerfil: `A nota foi emitida, mas o perfil nao foi atualizado: ${error instanceof Error ? error.message : String(error)}. Ajuste ${field} antes da proxima emissao.` };
+    }
+  }
+
   const prepareEmission: NfseAgentTool<DpsRequestToolInput, Record<string, unknown>> = {
     name: 'prepare_nfse_emission',
     title: 'Preparar emissao de NFS-e',
@@ -526,30 +590,7 @@ export function createNfseAgentToolkit(options: NfseAgentToolkitOptions = {}): N
     outputSchema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     requiresCertificate: true,
-    async run(input, context) {
-      sweep();
-      const { ambiente, issues, warnings, request } = validateForAgent(input, context);
-      if (issues.length) return { ok: false, ambiente, issues, warnings };
-      if (!context?.pfx) return { ok: false, ambiente, issues: [certificateRequired()], warnings };
-      try {
-        const nota = prepararNota(request, context.pfx);
-        const confirmationId = randomUUID();
-        const expiresAt = Date.now() + ttl;
-        pending.set(confirmationId, { kind: 'emission', nota, attempted: false, expiresAt });
-        return {
-          ok: true,
-          confirmationId,
-          expiresAt: new Date(expiresAt).toISOString(),
-          resumo: emissionSummary(request, nota),
-          warnings,
-          instrucoes: confirmationText(ambiente),
-        };
-      } catch (error) {
-        const mapped = toAgentIssues(error);
-        if (!mapped) throw error;
-        return { ok: false, ambiente, issues: mapped, warnings };
-      }
-    },
+    run: (input, context) => prepare(input, context),
   };
 
   const confirmEmission: NfseAgentTool<{ confirmationId: string }, Record<string, unknown>> = {
@@ -576,14 +617,14 @@ export function createNfseAgentToolkit(options: NfseAgentToolkitOptions = {}): N
         const existing = await recuperarNfsePorDps(nota.dpsId, context.pfx, nota.ambiente);
         if (existing) {
           pending.delete(id);
-          return { ok: true, recuperada: true, chaveAcesso: existing.chaveAcesso, dpsId: nota.dpsId, resumo: existing.resumo };
+          return { ok: true, recuperada: true, chaveAcesso: existing.chaveAcesso, dpsId: nota.dpsId, resumo: existing.resumo, ...recordProfileNDPS(entry) };
         }
       }
       entry.attempted = true;
       try {
         const result = await transmitirNotaPreparada(nota, context.pfx);
         pending.delete(id);
-        return { ok: true, chaveAcesso: result.chaveAcesso, dpsId: result.dpsId, ambiente: nota.ambiente };
+        return { ok: true, chaveAcesso: result.chaveAcesso, dpsId: result.dpsId, ambiente: nota.ambiente, ...recordProfileNDPS(entry) };
       } catch (error) {
         const mapped = toAgentIssues(error);
         if (mapped) {
@@ -694,8 +735,186 @@ export function createNfseAgentToolkit(options: NfseAgentToolkitOptions = {}): N
     },
   };
 
-  const tools = options.allowWrite
-    ? [...nfseAgentTools, prepareEmission, confirmEmission, prepareCancellation, confirmCancellation]
-    : [...nfseAgentTools];
+  const profileTools = options.profilePath === undefined ? [] : createProfileTools(options.profilePath, {
+    prepareFromProfile: async (input, context) => {
+      sweep();
+      let request: DpsJsonRequest;
+      const ambiente = resolveAmbiente(context);
+      const field = ultimoNDPSField(ambiente);
+      try {
+        const profile = readNfseProfile(options.profilePath);
+        // Skip numbers already held by emissions of this environment waiting for confirmation.
+        const reserved = [...pending.values()].flatMap((entry) =>
+          entry.kind === 'emission' && entry.nota.ambiente === ambiente && entry.profileNDPS !== undefined ? [entry.profileNDPS] : []);
+        const ultimo = profile[field];
+        const counter = typeof ultimo === 'number' ? Math.max(ultimo, ...reserved) : undefined;
+        request = buildDpsRequestFromProfile({ ...profile, [field]: counter }, input ?? ({} as NfseProfileInvoiceInput), ambiente);
+      } catch (error) {
+        if (error instanceof NfseProfileError) return { ok: false, ambiente, issues: [profileIssue(error)] };
+        throw error;
+      }
+      const nDPS = request.emissao.nDPS;
+      const { ambiente: _ignored, ...withoutAmbiente } = request;
+      return prepare({ request: withoutAmbiente }, context, {
+        profileNDPS: /^\d{1,15}$/.test(nDPS) ? Number(nDPS) : undefined,
+        resumo: { cliente: input?.cliente, servicoPerfil: input?.servico },
+      });
+    },
+  });
+  const writeTools = options.allowWrite ? [prepareEmission, confirmEmission, prepareCancellation, confirmCancellation] : [];
+  const tools = [
+    ...nfseAgentTools,
+    ...profileTools.filter((t) => options.allowWrite || t.name !== 'prepare_nfse_emission_from_profile'),
+    ...writeTools,
+  ];
   return { tools, pendingCount: () => (sweep(), pending.size) };
+}
+
+// ------------------------------------------------------------- profile tools
+
+function profileIssue(error: NfseProfileError): NfseAgentIssue {
+  return { code: error.code, path: error.path, severity: 'error', source: 'sdk', message: error.message };
+}
+
+const { properties: dpsProperties } = DPS_JSON_REQUEST_SCHEMA as { properties: Record<string, JsonSchema> };
+const emissaoProperties = (dpsProperties.emissao as { properties: Record<string, JsonSchema> }).properties;
+const servicoSchema = dpsProperties.servico as { properties: Record<string, JsonSchema>; required?: string[] };
+// Partial updates: the profile can be filled one field at a time.
+const { required: _prestadorRequired, ...prestadorUpdateSchema } = dpsProperties.prestador as Record<string, unknown>;
+
+const PROFILE_SERVICO_SCHEMA: JsonSchema = {
+  type: 'object',
+  description: 'Servico do prestador com o tratamento tributario que o usuario ou o contador definiu.',
+  properties: {
+    ...servicoSchema.properties,
+    tributacaoMunicipal: emissaoProperties.tributacaoMunicipal,
+    tributacaoFederal: emissaoProperties.tributacaoFederal,
+    totTrib: emissaoProperties.totTrib,
+  },
+  required: servicoSchema.required ?? ['cTribNac', 'xDescServ', 'cLocPrestacao'],
+  additionalProperties: false,
+};
+
+const PROFILE_UPDATE_SCHEMA: JsonSchema = {
+  type: 'object',
+  properties: {
+    prestador: prestadorUpdateSchema as JsonSchema,
+    servicos: { type: 'object', description: 'Servicos por nome curto, ex.: "consultoria".', additionalProperties: PROFILE_SERVICO_SCHEMA },
+    clientes: { type: 'object', description: 'Clientes (tomadores) por nome curto, ex.: "acme".', additionalProperties: emissaoProperties.tomador },
+    ultimoNDPS: { type: 'number', exclusiveMinimum: -1, description: 'Numero da ultima DPS emitida em PRODUCAO na serie do prestador (0 se nunca emitiu). A proxima emissao usa este numero mais um.' },
+    ultimoNDPSRestrita: { type: 'number', exclusiveMinimum: -1, description: 'O mesmo contador para a producao restrita (testes), que a SEFIN numera separado.' },
+  },
+  additionalProperties: false,
+};
+
+const PROFILE_INVOICE_SCHEMA: JsonSchema = {
+  type: 'object',
+  properties: {
+    cliente: { type: 'string', description: 'Nome do cliente no perfil. Omita so para nota sem tomador.' },
+    servico: { type: 'string', description: 'Nome do servico no perfil. Opcional quando o perfil tem um servico so.' },
+    valor: { type: 'string', description: 'Valor do servico, ex.: "1500.00".' },
+    competencia: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Data de competencia YYYY-MM-DD. Pergunte se o servico foi prestado em outro mes; sem ela, vale a data da emissao.' },
+    descricao: { type: 'string', description: 'Descricao do servico so para esta nota.' },
+    nDPS: { type: 'string', pattern: '^\\d{1,15}$', description: 'Numero da DPS. Normalmente omitido: o perfil controla a sequencia.' },
+  },
+  required: ['valor'],
+  additionalProperties: false,
+};
+
+function createProfileTools(
+  profilePath: string,
+  handlers: { prepareFromProfile: (input: NfseProfileInvoiceInput, context?: NfseAgentContext) => Promise<Record<string, unknown>> },
+): NfseAgentTool[] {
+  const caminho = resolveNfseProfilePath(profilePath);
+  const status = (profile: NfseProfile, context?: NfseAgentContext) => {
+    const field = ultimoNDPSField(resolveAmbiente(context));
+    const faltando = [
+      ...(profile.prestador ? [] : ['prestador']),
+      ...(Object.keys(profile.servicos ?? {}).length ? [] : ['servicos']),
+      ...(typeof profile[field] === 'number' ? [] : [field]),
+    ];
+    return { ambiente: resolveAmbiente(context), pronto: faltando.length === 0, faltando };
+  };
+
+  const getProfile: NfseAgentTool<Record<string, never>, Record<string, unknown>> = {
+    name: 'get_nfse_profile',
+    title: 'Ver perfil do emissor',
+    description:
+      'Mostra o perfil local: prestador, servicos e clientes salvos e o numero da ultima DPS. Use antes de emitir para saber ' +
+      'os nomes de clientes e servicos. Se faltar algo, ajude o usuario a completar com update_nfse_profile. ' +
+      'O CNPJ/CPF do certificado configurado aparece em certificado.documento.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    outputSchema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    requiresCertificate: false,
+    async run(_input, context) {
+      try {
+        const profile = readNfseProfile(profilePath);
+        const pfx = context?.pfx;
+        const certificado = pfx instanceof NfseCertificate
+          ? { documento: pfx.cnpj ?? pfx.cpf, validoAte: pfx.notAfter.toISOString().slice(0, 10) }
+          : pfx ? { documento: undefined } : null;
+        return { ok: true, caminho, ...status(profile, context), perfil: summarizeNfseProfile(profile), certificado };
+      } catch (error) {
+        if (error instanceof NfseProfileError) return { ok: false, caminho, issues: [profileIssue(error)] };
+        throw error;
+      }
+    },
+  };
+
+  const updateProfile: NfseAgentTool<NfseProfileUpdate, Record<string, unknown>> = {
+    name: 'update_nfse_profile',
+    title: 'Atualizar perfil do emissor',
+    description:
+      'Salva no perfil local os dados do prestador, servicos e clientes (por nome curto) e o numero da ultima DPS de cada ambiente. ' +
+      'Grave apenas valores que o usuario informou ou confirmou. Nunca escolha codigos fiscais (cTribNac, cNBS, regime, ' +
+      'tributacao): pergunte ao usuario ou ao contador dele. Nao envia nada para a SEFIN.',
+    inputSchema: PROFILE_UPDATE_SCHEMA,
+    outputSchema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    requiresCertificate: false,
+    async run(input, context) {
+      const schemaIssues = checkJsonSchema(PROFILE_UPDATE_SCHEMA, input ?? {});
+      if (schemaIssues.length) {
+        return {
+          ok: false,
+          issues: schemaIssues.map(({ path, message }) => ({ code: 'PROFILE_INVALID', path, severity: 'error' as const, source: 'schema' as const, message })),
+        };
+      }
+      try {
+        const profile = mergeNfseProfile(readNfseProfile(profilePath), input ?? {});
+        writeNfseProfile(profile, profilePath);
+        return { ok: true, caminho, ...status(profile, context), perfil: summarizeNfseProfile(profile) };
+      } catch (error) {
+        if (error instanceof NfseProfileError) return { ok: false, caminho, issues: [profileIssue(error)] };
+        throw error;
+      }
+    },
+  };
+
+  const prepareFromProfile: NfseAgentTool<NfseProfileInvoiceInput, Record<string, unknown>> = {
+    name: 'prepare_nfse_emission_from_profile',
+    title: 'Preparar emissao pelo perfil',
+    description:
+      'Prepara uma NFS-e com o prestador, o servico e o cliente salvos no perfil: basta o valor (e a competencia, se o ' +
+      'servico foi de outro mes). Valida, monta e assina SEM enviar. Mostre o resumo ao usuario e chame ' +
+      'confirm_nfse_emission somente depois que ele aprovar explicitamente.',
+    inputSchema: PROFILE_INVOICE_SCHEMA,
+    outputSchema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    requiresCertificate: true,
+    async run(input, context) {
+      const schemaIssues = checkJsonSchema(PROFILE_INVOICE_SCHEMA, input ?? {});
+      if (schemaIssues.length) {
+        return {
+          ok: false,
+          ambiente: resolveAmbiente(context),
+          issues: schemaIssues.map(({ path, message }) => ({ code: 'INVALID_INPUT', path, severity: 'error' as const, source: 'schema' as const, message })),
+        };
+      }
+      return handlers.prepareFromProfile(input, context);
+    },
+  };
+
+  return [getProfile, updateProfile, prepareFromProfile];
 }

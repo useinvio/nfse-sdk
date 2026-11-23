@@ -92,12 +92,28 @@ Guia: [Testar sem certificado](../guias/testes.md).
 | API | Descrição |
 |---|---|
 | `nfseAgentTools` (`/agent`) | Ferramentas só de leitura. |
-| `createNfseAgentToolkit({ allowWrite?, confirmationTtlMs? })` (`/agent`) | Leitura + emissão e cancelamento em duas etapas. |
+| `createNfseAgentToolkit({ allowWrite?, confirmationTtlMs?, profilePath? })` (`/agent`) | Leitura + emissão e cancelamento em duas etapas. Com `profilePath`, também as ferramentas do perfil. |
 | `toAgentIssues(error)` (`/agent`) | Converte erros do SDK em issues para o modelo. |
 | `createNfseMcpServer(opts)` / `runNfseMcpStdio(opts?)` (`/mcp`) | Servidor MCP sem dependências. |
 | `nfse-mcp` (bin) | `npx -y @useinvio/nfse-mcp` ou `npx -y -p @useinvio/nfse-sdk nfse-mcp`. |
 
 Guia: [Agentes de IA e MCP](../guias/agentes-ia.md).
+
+## Perfil do emissor
+
+| API | Descrição |
+|---|---|
+| `readNfseProfile(path?)` | Lê o perfil (padrão `~/.config/nfse/perfil.json`). Arquivo ausente vira perfil vazio. |
+| `writeNfseProfile(perfil, path?)` | Grava de forma atômica, com permissão 600 e pasta 700. |
+| `mergeNfseProfile(perfil, update)` | Junta uma atualização parcial. Clientes e serviços por nome; `null` remove. |
+| `buildDpsRequestFromProfile(perfil, { cliente?, servico?, valor, competencia?, descricao?, nDPS? }, ambiente?)` | Monta a `DpsJsonRequest` completa a partir do perfil. |
+| `summarizeNfseProfile(perfil)` | Resumo curto (nomes e documentos) para mostrar ao usuário ou ao modelo. |
+| `ultimoNDPSField(ambiente)` | `ultimoNDPS` em produção, `ultimoNDPSRestrita` na produção restrita. |
+| `resolveNfseProfilePath(path?)`, `DEFAULT_NFSE_PROFILE_PATH` | Caminho do perfil, com `~` expandido. |
+| `NfseProfileError` | `code`: `PROFILE_INVALID`, `PROFILE_INCOMPLETE` ou `PROFILE_ITEM_NOT_FOUND`, com `path`. |
+
+Tipos: `NfseProfile`, `NfseProfileServico`, `NfseProfileInvoiceInput`, `NfseProfileUpdate`.
+Guia: [Perfil do emissor](../guias/agentes-ia.md#perfil-do-emissor).
 
 ## Certificado
 

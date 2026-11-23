@@ -69,6 +69,9 @@ export function checkJsonSchema(schema: JsonSchema, value: unknown, path = '$'):
       const propertySchema = properties[key];
       if (propertySchema) violations.push(...checkJsonSchema(propertySchema, item, child(key)));
       else if (schema.additionalProperties === false) fail('additionalProperties', 'nao e um campo suportado', child(key));
+      else if (typeof schema.additionalProperties === 'object' && schema.additionalProperties !== null) {
+        violations.push(...checkJsonSchema(schema.additionalProperties as JsonSchema, item, child(key)));
+      }
     }
   }
   return violations;

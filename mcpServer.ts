@@ -10,17 +10,24 @@
  *   NFSE_AMBIENTE=restrita|producao      (default: restrita)
  *   NFSE_MCP_ALLOW_WRITE=1               (enables prepare/confirm emission and cancellation)
  *   NFSE_MCP_MOCK=1                      (in-process mock SEFIN and a test certificate; no real calls)
+ *   NFSE_PROFILE_PATH=<file>             (issuer profile; default ~/.config/nfse/perfil.json,
+ *                                         or perfil-teste.json next to it in mock mode)
  */
 import { createInterface } from 'node:readline';
 import { createNfseAgentToolkit, type NfseAgentContext, type NfseAgentTool } from './agent.js';
 import { NfseCertificate, type CertificateInput } from './certificate.js';
 import type { Ambiente } from './config.js';
+import { DEFAULT_NFSE_PROFILE_PATH } from './profile.js';
 
 export const NFSE_MCP_ENV = {
   ambiente: 'NFSE_AMBIENTE',
   allowWrite: 'NFSE_MCP_ALLOW_WRITE',
   mock: 'NFSE_MCP_MOCK',
+  profilePath: 'NFSE_PROFILE_PATH',
 } as const;
+
+/** Mock emissions must never advance the real profile's DPS counters. */
+const MOCK_PROFILE_PATH = '~/.config/nfse/perfil-teste.json';
 
 const SUPPORTED_PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
 const SERVER_INFO = { name: 'nfse-nacional', title: 'NFS-e Nacional (SEFIN)', version: '0.1.0' };
@@ -29,6 +36,8 @@ export interface NfseMcpServerOptions {
   certificate?: CertificateInput;
   ambiente?: Ambiente;
   allowWrite?: boolean;
+  /** Issuer profile file. Enables the profile tools; see `profile.ts`. */
+  profilePath?: string;
   /** Written to stderr by the stdio runner; defaults to no logging. */
   log?: (message: string) => void;
 }
@@ -50,6 +59,8 @@ const INSTRUCTIONS = [
   'Emissao e cancelamento tem duas etapas: prepare_* devolve um resumo; mostre-o e so chame confirm_* apos aprovacao explicita do usuario.',
   'Depois de uma rejeicao, use explain_rejection com os codigos para explicar a regra oficial ao usuario.',
   'Depois de timeout na emissao, nunca prepare uma nova DPS: repita confirm_nfse_emission ou use recover_nfse_by_dps.',
+  'Com perfil (get_nfse_profile), prefira prepare_nfse_emission_from_profile: basta cliente, servico e valor. ' +
+    'Se o perfil estiver incompleto, complete com update_nfse_profile perguntando ao usuario, um dado de cada vez.',
 ].join('\n');
 
 function toolDescriptor(tool: NfseAgentTool, protocolVersion: string) {
@@ -69,7 +80,7 @@ function toolDescriptor(tool: NfseAgentTool, protocolVersion: string) {
  * and returns the response, or `undefined` for notifications.
  */
 export function createNfseMcpServer(options: NfseMcpServerOptions = {}) {
-  const { tools } = createNfseAgentToolkit({ allowWrite: options.allowWrite });
+  const { tools } = createNfseAgentToolkit({ allowWrite: options.allowWrite, profilePath: options.profilePath });
   const context: NfseAgentContext = { pfx: options.certificate, ambiente: options.ambiente ?? 'restrita' };
   let protocolVersion: string = SUPPORTED_PROTOCOL_VERSIONS[0];
 
@@ -145,7 +156,8 @@ export async function nfseMcpOptionsFromEnv(env: NodeJS.ProcessEnv = process.env
     installMockSefin();
     certificate ??= createTestCertificate().certificate;
   }
-  return { certificate, ambiente, allowWrite: truthy(env[NFSE_MCP_ENV.allowWrite]), mock };
+  const profilePath = env[NFSE_MCP_ENV.profilePath]?.trim() || (mock ? MOCK_PROFILE_PATH : DEFAULT_NFSE_PROFILE_PATH);
+  return { certificate, ambiente, allowWrite: truthy(env[NFSE_MCP_ENV.allowWrite]), mock, profilePath };
 }
 
 /** Runs the server on stdin/stdout until stdin closes. Logs go to stderr only. */
@@ -156,6 +168,7 @@ export async function runNfseMcpStdio(options?: NfseMcpServerOptions): Promise<v
   const certificate = resolved.certificate instanceof NfseCertificate ? resolved.certificate : undefined;
   log(`ambiente=${resolved.ambiente ?? 'restrita'} escrita=${resolved.allowWrite ? 'habilitada' : 'desabilitada'} `
     + `certificado=${certificate ? `${certificate.cnpj ?? certificate.cpf ?? 'sem documento'} (vence ${certificate.notAfter.toISOString().slice(0, 10)})` : resolved.certificate ? 'legado' : 'ausente'}`
+    + `${resolved.profilePath ? ` perfil=${resolved.profilePath}` : ''}`
     + `${(resolved as { mock?: boolean }).mock ? ' mock=SEFIN simulada' : ''}`);
 
   const write = (response: JsonRpcResponse) => process.stdout.write(`${JSON.stringify(response)}\n`);
