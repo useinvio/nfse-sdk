@@ -4,11 +4,25 @@ Use `NfseCertificate`. Ele lê o `.pfx`/`.p12` uma vez, mantém a chave privada
 fora do objeto e descarta a senha e os bytes do arquivo. `console.log(certificado)`
 e `JSON.stringify(certificado)` mostram só CNPJ/CPF, validade e fingerprint.
 
-## Variáveis de ambiente (recomendado)
+## Na sua máquina
+
+Guarde o certificado e a senha fora do projeto, numa pasta só sua e fora de
+pastas sincronizadas (Dropbox, iCloud, Google Drive). A senha é digitada sem
+aparecer na tela, então não vai para o histórico do terminal:
 
 ```bash
-NFSE_CERT_PATH=./certificado.pfx   # ou NFSE_CERT_BASE64=<PFX em base64>
-NFSE_CERT_PASSWORD=sua-senha       # ou NFSE_CERT_PASSWORD_FILE=/run/secrets/nfse_cert_password
+mkdir -p ~/.config/nfse && chmod 700 ~/.config/nfse
+cp certificado.pfx ~/.config/nfse/
+printf 'Senha: ' && read -rs s && printf '%s' "$s" > ~/.config/nfse/senha && unset s && echo
+chmod 600 ~/.config/nfse/*
+```
+
+No `.env` do projeto, aponte para os arquivos. O SDK expande o `~` no começo
+do caminho, inclusive com `node --env-file`:
+
+```bash
+NFSE_CERT_PATH=~/.config/nfse/certificado.pfx
+NFSE_CERT_PASSWORD_FILE=~/.config/nfse/senha
 ```
 
 ```ts
@@ -18,9 +32,23 @@ const certificado = NfseCertificate.fromEnv();
 console.log(certificado.cnpj, certificado.notAfter, certificado.daysUntilExpiry());
 ```
 
-`NFSE_CERT_PASSWORD_FILE` lê a senha de um arquivo, o formato de secrets do
-Docker e do Kubernetes. Nunca versione o `.pfx` nem a senha: o `.gitignore` do
-projeto já ignora `*.pfx`, `*.p12` e `.env*`.
+Evite `NFSE_CERT_PASSWORD=...` direto no terminal: o comando fica salvo no
+histórico. Ele continua aceito, mas o arquivo de senha é o caminho preferido.
+
+## Em servidores
+
+`NFSE_CERT_PASSWORD_FILE` também é o formato de secrets do Docker e do
+Kubernetes, então a mesma configuração funciona em contêiner:
+
+```bash
+NFSE_CERT_PATH=/run/secrets/nfse_cert.pfx   # ou NFSE_CERT_BASE64=<PFX em base64>
+NFSE_CERT_PASSWORD_FILE=/run/secrets/nfse_cert_password
+```
+
+Em produção, o melhor é buscar o PFX e a senha num cofre de segredos e usar
+`NfseCertificate.fromPfx` (veja [vários emitentes](#vários-emitentes-multi-tenant)).
+Nunca versione o `.pfx` nem a senha: o `.gitignore` do projeto já ignora
+`*.pfx`, `*.p12` e `.env*`.
 
 Para gerar o base64 do PFX:
 

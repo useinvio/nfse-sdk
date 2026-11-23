@@ -20,12 +20,25 @@ npm install @useinvio/nfse-sdk
 
 ## 2. Configure o certificado
 
-Copie o `.pfx` para a pasta e crie um `.env` (não versione nenhum dos dois):
+Guarde o `.pfx` e a senha fora do projeto, numa pasta que só você lê e que
+não sincroniza com Dropbox, iCloud ou Google Drive. A senha é digitada sem
+aparecer na tela e não fica no histórico do terminal:
 
 ```bash
-NFSE_CERT_PATH=./certificado.pfx
-NFSE_CERT_PASSWORD=sua-senha
+mkdir -p ~/.config/nfse && chmod 700 ~/.config/nfse
+cp certificado.pfx ~/.config/nfse/
+printf 'Senha: ' && read -rs s && printf '%s' "$s" > ~/.config/nfse/senha && unset s && echo
+chmod 600 ~/.config/nfse/*
 ```
+
+Depois crie um `.env` na pasta do projeto apontando para esses arquivos:
+
+```bash
+NFSE_CERT_PATH=~/.config/nfse/certificado.pfx
+NFSE_CERT_PASSWORD_FILE=~/.config/nfse/senha
+```
+
+O SDK entende o `~` no começo do caminho, mesmo com `node --env-file`.
 
 Confira se o SDK lê o certificado:
 
@@ -35,7 +48,7 @@ node --env-file=.env -e "import('@useinvio/nfse-sdk').then(({ NfseCertificate })
 
 A saída mostra só o CNPJ, a validade e o fingerprint, como
 `NfseCertificate { cnpj=12345678000195, notAfter=..., fingerprintSha256=... }`.
-Se aparecer `CERTIFICATE_INVALID_PASSWORD`, revise a senha.
+Se aparecer `CERTIFICATE_INVALID_PASSWORD`, grave a senha de novo com o comando acima.
 
 ## 3. Emita a nota
 

@@ -35,9 +35,20 @@ Precisa de Node.js 20 ou mais recente. Só isso.
 
 ## 🚀 Sua primeira nota
 
+Guarde o certificado fora do projeto, longe de pastas sincronizadas. A senha é digitada sem aparecer na tela e não vai para o histórico do terminal:
+
 ```bash
-NFSE_CERT_PATH=./certificado.pfx
-NFSE_CERT_PASSWORD=sua-senha
+mkdir -p ~/.config/nfse && chmod 700 ~/.config/nfse
+cp certificado.pfx ~/.config/nfse/
+printf 'Senha: ' && read -rs s && printf '%s' "$s" > ~/.config/nfse/senha && unset s && echo
+chmod 600 ~/.config/nfse/*
+```
+
+E aponte o `.env` para lá:
+
+```bash
+NFSE_CERT_PATH=~/.config/nfse/certificado.pfx
+NFSE_CERT_PASSWORD_FILE=~/.config/nfse/senha
 ```
 
 ```ts

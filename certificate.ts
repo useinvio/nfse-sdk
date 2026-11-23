@@ -1,6 +1,7 @@
 import { createPrivateKey, X509Certificate, type KeyObject } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import https from 'node:https';
+import { homedir } from 'node:os';
 import { createSecureContext } from 'node:tls';
 import { inspect } from 'node:util';
 import forge from 'node-forge';
@@ -107,9 +108,18 @@ export function icpBrasilTaxIds(cert: forge.pki.Certificate, commonName = String
   return found;
 }
 
+/**
+ * @internal Expands a leading `~` to the user's home directory. Loaders such as
+ * `node --env-file` do not, and `~/.config/nfse/` is where the docs suggest
+ * keeping the certificate on a developer machine.
+ */
+export function expandHomePath(path: string): string {
+  return /^~(?=$|[\\/])/.test(path) ? homedir() + path.slice(1) : path;
+}
+
 function readPasswordFromEnv(env: NodeJS.ProcessEnv): string {
   const file = env[NFSE_CERT_ENV.passwordFile]?.trim();
-  if (file) return readFileSync(file, 'utf8').replace(/\r?\n$/, '');
+  if (file) return readFileSync(expandHomePath(file), 'utf8').replace(/\r?\n$/, '');
   const password = env[NFSE_CERT_ENV.password];
   if (password === undefined) {
     throw new CertificateValidationError(
@@ -210,7 +220,7 @@ export class NfseCertificate implements NfseCertificateInfo {
       );
     }
     const password = readPasswordFromEnv(env);
-    return path ? NfseCertificate.fromFile(path, password) : NfseCertificate.fromBase64(base64!, password);
+    return path ? NfseCertificate.fromFile(expandHomePath(path), password) : NfseCertificate.fromBase64(base64!, password);
   }
 
   /** Wraps legacy {@link PfxMaterial}; the SDK keeps a `KeyObject`, not the PEM string. */

@@ -37,9 +37,20 @@ You need Node.js 20 or newer. That's it.
 
 ## 🚀 Your first invoice
 
+Keep the certificate outside the project and away from synced folders. The password is typed without echo, so it never lands in your shell history:
+
 ```bash
-NFSE_CERT_PATH=./certificate.pfx
-NFSE_CERT_PASSWORD=your-password
+mkdir -p ~/.config/nfse && chmod 700 ~/.config/nfse
+cp certificate.pfx ~/.config/nfse/
+printf 'Password: ' && read -rs s && printf '%s' "$s" > ~/.config/nfse/password && unset s && echo
+chmod 600 ~/.config/nfse/*
+```
+
+Then point your `.env` at it:
+
+```bash
+NFSE_CERT_PATH=~/.config/nfse/certificate.pfx
+NFSE_CERT_PASSWORD_FILE=~/.config/nfse/password
 ```
 
 ```ts
